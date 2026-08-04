@@ -18,6 +18,7 @@ DEBUG = env.bool("DEBUG", True)
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", ["127.0.0.1", "localhost"])
 
 INSTALLED_APPS = [
+    "rest_framework",
     "phonenumber_field",
     "foodcartapp.apps.FoodcartappConfig",
     "restaurateur.apps.RestaurateurConfig",
@@ -121,3 +122,11 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, "assets"),
     os.path.join(BASE_DIR, "bundles"),
 ]
+
+
+REST_FRAMEWORK = {
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
+    ]
+}

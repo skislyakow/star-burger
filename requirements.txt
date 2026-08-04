@@ -5,3 +5,4 @@ environs[django]==14.2.*
 django-phonenumber-field
 phonenumbers
 django-stubs
+djangorestframework
