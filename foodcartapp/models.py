@@ -1,6 +1,8 @@
 from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
 from django.core.validators import MinValueValidator
+from django.db.models import F, Sum, Value, DecimalField
+from django.db.models.functions import Coalesce
 
 
 class Restaurant(models.Model):
@@ -89,6 +91,19 @@ class Product(models.Model):
         return self.name
 
 
+class OrderQuerySet(models.QuerySet):
+    def with_total_cost(self):
+        return self.annotate(
+            total_cost=Coalesce(
+                Sum(F("items__quantity") * F("items__product__price")),
+                Value(
+                    0,
+                    output_field=DecimalField(max_digits=8, decimal_places=2),
+                ),
+            )
+        )
+
+
 class Order(models.Model):
     id = models.AutoField(primary_key=True)
     firstname = models.CharField(
@@ -112,6 +127,7 @@ class Order(models.Model):
         auto_now_add=True,
         db_index=True,
     )
+    objects = OrderQuerySet.as_manager()
 
     class Meta:
         verbose_name = "заказ"
