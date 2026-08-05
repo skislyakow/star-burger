@@ -1,11 +1,11 @@
 from django import forms
 from django.shortcuts import redirect, render
 from django.views import View
-from django.urls import reverse_lazy
 from django.contrib.auth.decorators import user_passes_test
 
 from django.contrib.auth import authenticate, login
 from django.contrib.auth import views as auth_views
+from django.contrib.auth.models import User
 
 
 from foodcartapp.models import Order, Product, Restaurant
@@ -46,7 +46,7 @@ class LoginView(View):
             password = form.cleaned_data["password"]
 
             user = authenticate(request, username=username, password=password)
-            if user:
+            if isinstance(user, User):
                 login(request, user)
                 if user.is_staff:  # FIXME replace with specific permission
                     return redirect("restaurateur:RestaurantView")
@@ -63,7 +63,7 @@ class LoginView(View):
 
 
 class LogoutView(auth_views.LogoutView):
-    next_page = reverse_lazy("restaurateur:login")
+    next_page = "restaurateur:login"
 
 
 def is_manager(user):
@@ -79,7 +79,7 @@ def view_products(request):
     for product in products:
         availability = {
             item.restaurant_id: item.availability
-            for item in product.menu_items.all()
+            for item in product.menu_items.all()  # type: ignore[attr-defined]
         }
         ordered_availability = [
             availability.get(restaurant.id, False)

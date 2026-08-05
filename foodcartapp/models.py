@@ -4,6 +4,7 @@ from django.core.validators import MinValueValidator
 
 
 class Restaurant(models.Model):
+    id = models.AutoField(primary_key=True)
     name = models.CharField("название", max_length=50)
     address = models.CharField(
         "адрес",
@@ -25,6 +26,7 @@ class Restaurant(models.Model):
 
 
 class ProductCategory(models.Model):
+    id = models.AutoField(primary_key=True)
     name = models.CharField("название", max_length=50)
 
     class Meta:
@@ -49,6 +51,7 @@ class ProductManager(models.Manager):
 
 
 class Product(models.Model):
+    id = models.AutoField(primary_key=True)
     name = models.CharField("название", max_length=50)
     category = models.ForeignKey(
         ProductCategory,
@@ -120,6 +123,7 @@ class Order(models.Model):
 
 
 class OrderItem(models.Model):
+    id = models.AutoField(primary_key=True)
     order = models.ForeignKey(
         Order,
         related_name="items",
@@ -146,6 +150,7 @@ class OrderItem(models.Model):
 
 
 class RestaurantMenuItem(models.Model):
+    id = models.AutoField(primary_key=True)
     restaurant = models.ForeignKey(
         Restaurant,
         related_name="menu_items",
