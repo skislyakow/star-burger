@@ -35,12 +35,17 @@ class ProductCategory(models.Model):
         return self.name
 
 
-class ProductManager(models.Manager):
+class ProductQuerySet(models.QuerySet):
     def available(self):
         products = RestaurantMenuItem.objects.filter(
             availability=True
         ).values_list("product")
         return self.filter(pk__in=products)
+
+
+class ProductManager(models.Manager):
+    def get_queryset(self) -> models.QuerySet:
+        return ProductQuerySet(self.model, using=self._db)
 
 
 class Product(models.Model):
