@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.shortcuts import reverse
+from django.urls import reverse
 from django.templatetags.static import static
 from django.utils.html import format_html
 
@@ -107,13 +107,14 @@ class ProductAdmin(admin.ModelAdmin):
 
 
 @admin.register(ProductCategory)
-class ProductAdmin(admin.ModelAdmin):
+class ProductCategoryAdmin(admin.ModelAdmin):
     pass
 
 
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
+    readonly_fields = ["price"]
 
 
 @admin.register(Order)
@@ -127,3 +128,13 @@ class OrderAdmin(admin.ModelAdmin):
         "created_at",
     ]
     inlines = [OrderItemInline]
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        for instance in instances:
+            if instance.price is None:
+                instance.price = instance.product.price
+            instance.save()
+        formset.save_m2m()
