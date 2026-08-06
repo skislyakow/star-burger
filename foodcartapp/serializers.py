@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from .models import Order, OrderItem
@@ -47,12 +48,13 @@ class OrderSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        products = validated_data.pop("products")
-        order = Order.objects.create(**validated_data)
-        for product_data in products:
-            OrderItem.objects.create(
-                order=order,
-                price=product_data["product"].price,
-                **product_data,
-            )
+        with transaction.atomic():
+            products = validated_data.pop("products")
+            order = Order.objects.create(**validated_data)
+            for product_data in products:
+                OrderItem.objects.create(
+                    order=order,
+                    price=product_data["product"].price,
+                    **product_data,
+                )
         return order
