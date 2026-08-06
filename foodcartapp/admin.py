@@ -127,8 +127,11 @@ class OrderAdmin(admin.ModelAdmin):
         "lastname",
         "phonenumber",
         "address",
+        "status",
         "created_at",
     ]
+    list_editable = ["status"]
+    list_filter = ["status"]
     inlines = [OrderItemInline]
 
     def save_formset(self, request, form, formset, change):

@@ -127,6 +127,21 @@ class Order(models.Model):
         auto_now_add=True,
         db_index=True,
     )
+
+    class Status(models.TextChoices):
+        UNPROCESSED = "unprocessed", "Необработанный"
+        ASSEMBLED = "assembled", "Собран"
+        DELIVERED = "delivered", "Доставлен"
+        COMPLETED = "completed", "Выполнен"
+
+    status = models.CharField(
+        "статус",
+        max_length=30,
+        choices=Status.choices,
+        default=Status.UNPROCESSED,
+        db_index=True,
+    )
+
     objects = OrderQuerySet.as_manager()
 
     class Meta:

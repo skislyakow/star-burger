@@ -113,7 +113,9 @@ def view_restaurants(request):
 
 @user_passes_test(is_manager, login_url="restaurateur:login")
 def view_orders(request):
-    orders = Order.objects.with_total_cost()  # type: ignore[attr-defined]
+    orders = Order.objects.exclude(
+        status=Order.Status.COMPLETED
+    ).with_total_cost()  # type: ignore[attr-defined]
     return render(
         request,
         template_name="order_items.html",
