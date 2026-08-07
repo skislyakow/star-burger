@@ -162,6 +162,18 @@ class Order(models.Model):
         db_index=True,
     )
 
+    class PaymentMethod(models.TextChoices):
+        ELECTRONIC = "electronic", "Электронно"
+        CASH = "cash", "Наличными"
+
+    payment_method = models.CharField(
+        "способ оплаты",
+        max_length=30,
+        choices=PaymentMethod.choices,
+        default=PaymentMethod.CASH,
+        db_index=True,
+    )
+
     objects = OrderQuerySet.as_manager()
 
     class Meta:
