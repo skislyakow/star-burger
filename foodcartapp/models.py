@@ -148,6 +148,20 @@ class Order(models.Model):
         default="",
     )
 
+    called_at = models.DateField(
+        "Дата звонка",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
+    delivered_at = models.DateTimeField(
+        "дата доставки",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+
     objects = OrderQuerySet.as_manager()
 
     class Meta:
