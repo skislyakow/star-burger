@@ -1,3 +1,5 @@
+import re
+
 from django import forms
 from django.shortcuts import redirect, render
 from django.views import View
@@ -137,6 +139,16 @@ def view_orders(request):
 
     restaurants_for_product = {}
     restaurant_names = {}
+    restaurant_cities = []
+
+    for restaurant in Restaurant.objects.all():
+        city = restaurant.address.split(",")[0].strip()
+        city = re.sub(
+            r"^(г\.|город)\s*", "", city, flags=re.IGNORECASE
+        ).lower()
+        if city:
+            restaurant_cities.append(city)
+
     for menu_item in menu_items:
         restaurants_for_product.setdefault(
             menu_item.product_id,  # type: ignore[attr-defined]
@@ -158,7 +170,10 @@ def view_orders(request):
             restaurant_names[restaurant_id]
             for restaurant_id in (available or set())
         )
-        orders_info.append((order, available_names))
+        city_ok = any(
+            city in order.address.lower() for city in restaurant_cities
+        )
+        orders_info.append((order, available_names, city_ok))
 
     return render(
         request,
