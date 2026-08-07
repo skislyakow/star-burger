@@ -20,11 +20,12 @@
       <th>Адрес доставки</th>
       <th>Стоимость заказа</th>
       <th>Способ оплаты</th>
-      <th>Комментарий</th>      
+      <th>Комментарий</th>
+      <th>Ресторан</th>      
       <th>Редактировать</th>
     </tr>
 
-    {% for item in order_items %}
+    {% for item, available_restaurants in order_items %}
       <tr>
         <td>{{ item.id }}</td>
         <td>{{ item.get_status_display }}</td>
@@ -34,6 +35,20 @@
         <td>{{ item.total_cost }}</td>
         <td>{{ item.get_payment_method_display }}</td>
         <td>{{ item.comment }}</td>
+        <td>
+          {% if item.restaurant %}
+            {{ item.restaurant.name }}
+          {% else %}
+            <details>
+              <summary></summary>
+              {% for restaurant in available_restaurants %}
+                {{ restaurant }}<br/>
+              {% empty %}
+                <em>Ни один ресторан не может приготовить заказ</em>
+              {% endfor %}
+            </details>
+          {% endif %}
+        </td>
         <td><a href="{% url "admin:foodcartapp_order_change" object_id=item.id %}?next={{ request.path|urlencode }}">Редактировать</a></td>
       </tr>
     {% endfor %}

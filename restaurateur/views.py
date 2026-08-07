@@ -2,13 +2,12 @@ from django import forms
 from django.shortcuts import redirect, render
 from django.views import View
 from django.contrib.auth.decorators import user_passes_test
-
 from django.contrib.auth import authenticate, login
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.models import User
+from django.db.models import Case, When, Value, IntegerField
 
-
-from foodcartapp.models import Order, Product, Restaurant
+from foodcartapp.models import Order, Product, Restaurant, RestaurantMenuItem
 
 
 class Login(forms.Form):
@@ -113,13 +112,58 @@ def view_restaurants(request):
 
 @user_passes_test(is_manager, login_url="restaurateur:login")
 def view_orders(request):
-    orders = Order.objects.exclude(
-        status=Order.Status.COMPLETED
-    ).with_total_cost()  # type: ignore[attr-defined]
+    orders = (
+        Order.objects.exclude(status=Order.Status.COMPLETED)
+        .select_related("restaurant")
+        .prefetch_related("items")
+        .with_total_cost()  # type: ignore[attr-defined]
+        .annotate(
+            priority=Case(
+                When(status=Order.Status.UNPROCESSED, then=Value(0)),
+                When(status=Order.Status.ASSEMBLED, then=Value(1)),
+                When(status=Order.Status.DELIVERED, then=Value(2)),
+                default=Value(3),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by("priority", "-created_at")
+    )
+
+    menu_items = list(
+        RestaurantMenuItem.objects.select_related("restaurant").filter(
+            availability=True
+        )
+    )
+
+    restaurants_for_product = {}
+    restaurant_names = {}
+    for menu_item in menu_items:
+        restaurants_for_product.setdefault(
+            menu_item.product_id,  # type: ignore[attr-defined]
+            set(),
+        ).add(menu_item.restaurant_id)  # type: ignore[attr-defined]
+        restaurant_names[menu_item.restaurant_id] = menu_item.restaurant.name  # type: ignore[attr-defined]
+
+    orders_info = []
+    for order in orders:
+        available = None
+        for item in order.items.all():
+            restaurants = restaurants_for_product.get(item.product_id, set())
+            available = (
+                restaurants if available is None else (available & restaurants)
+            )
+            if not available:
+                break
+        available_names = sorted(
+            restaurant_names[restaurant_id]
+            for restaurant_id in (available or set())
+        )
+        orders_info.append((order, available_names))
+
     return render(
         request,
         template_name="order_items.html",
         context={
-            "order_items": orders,
+            "order_items": orders_info,
         },
     )

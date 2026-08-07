@@ -129,6 +129,7 @@ class OrderAdmin(admin.ModelAdmin):
         "phonenumber",
         "address",
         "status",
+        "restaurant",
         "created_at",
     ]
     list_editable = ["status"]
@@ -153,3 +154,8 @@ class OrderAdmin(admin.ModelAdmin):
         ):
             return redirect(next_url)
         return response
+
+    def save_model(self, request, obj, form, change):
+        if obj.restaurant_id and obj.status == Order.Status.UNPROCESSED:
+            obj.status = Order.Status.ASSEMBLED
+        super().save_model(request, obj, form, change)
