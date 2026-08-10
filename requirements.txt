@@ -6,3 +6,5 @@ django-phonenumber-field
 phonenumbers
 django-stubs
 djangorestframework
+requests
+geopy

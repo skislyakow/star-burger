@@ -25,7 +25,7 @@
       <th>Редактировать</th>
     </tr>
 
-    {% for item, available_restaurants, city_ok in order_items %}
+    {% for item, restaurants in order_items %}
       <tr>
         <td>{{ item.id }}</td>
         <td>{{ item.get_status_display }}</td>
@@ -36,17 +36,15 @@
         <td>{{ item.get_payment_method_display }}</td>
         <td>{{ item.comment }}</td>
         <td>
-          {% if not city_ok %}
-            Ошибка
-          {% elif item.restaurant %}
+          {% if item.restaurant %}
             Готовит: {{ item.restaurant.name }}
-          {% else %}
+          {% elif restaurants %}
             Могут приготовить:
-            {% for restaurant in available_restaurants %}
-              {{ restaurant }}<br/>
-            {% empty %}
-              <em>Ни один ресторан не может приготовить заказ</em>
+            {% for restaurant, distance in restaurants %}
+              {{ restaurant }}{% if distance %} - {{ distance|floatformat:'1' }} км{% endif %}<br/>
             {% endfor %}
+          {% else %}
+            <em>Ни один ресторан не может приготовить заказ</em>
           {% endif %}
         </td>
         <td><a href="{% url "admin:foodcartapp_order_change" object_id=item.id %}?next={{ request.path|urlencode }}">Редактировать</a></td>

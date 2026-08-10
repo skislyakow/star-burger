@@ -1,5 +1,3 @@
-import re
-
 from django import forms
 from django.shortcuts import redirect, render
 from django.views import View
@@ -8,7 +6,9 @@ from django.contrib.auth import authenticate, login
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.models import User
 from django.db.models import Case, When, Value, IntegerField
+from geopy.distance import distance
 
+from foodcartapp.geocoder import get_coordinates
 from foodcartapp.models import Order, Product, Restaurant, RestaurantMenuItem
 
 
@@ -137,26 +137,19 @@ def view_orders(request):
         )
     )
 
-    restaurants_for_product = {}
-    restaurant_names = {}
-    restaurant_cities = []
+    restaurant_by_id = {
+        restaurant.id: restaurant for restaurant in Restaurant.objects.all()
+    }
 
-    for restaurant in Restaurant.objects.all():
-        city = restaurant.address.split(",")[0].strip()
-        city = re.sub(
-            r"^(г\.|город)\s*", "", city, flags=re.IGNORECASE
-        ).lower()
-        if city:
-            restaurant_cities.append(city)
+    restaurants_for_product = {}
+    orders_info = []
 
     for menu_item in menu_items:
         restaurants_for_product.setdefault(
             menu_item.product_id,  # type: ignore[attr-defined]
             set(),
         ).add(menu_item.restaurant_id)  # type: ignore[attr-defined]
-        restaurant_names[menu_item.restaurant_id] = menu_item.restaurant.name  # type: ignore[attr-defined]
 
-    orders_info = []
     for order in orders:
         available = None
         for item in order.items.all():
@@ -166,14 +159,23 @@ def view_orders(request):
             )
             if not available:
                 break
-        available_names = sorted(
-            restaurant_names[restaurant_id]
-            for restaurant_id in (available or set())
+
+        order_coordinates = get_coordinates(order.address)
+        restaurants_info = []
+        for restaurant_id in available or set():
+            restaurant = restaurant_by_id[restaurant_id]
+            restaurant_coordinates = get_coordinates(restaurant.address)
+            distance_km = None
+            if order_coordinates and restaurant_coordinates:
+                distance_km = distance(
+                    order_coordinates, restaurant_coordinates
+                ).km
+            restaurants_info.append((restaurant.name, distance_km))
+
+        restaurants_info.sort(
+            key=lambda entry: (entry[1] is None, entry[1] or 0, entry[0])
         )
-        city_ok = any(
-            city in order.address.lower() for city in restaurant_cities
-        )
-        orders_info.append((order, available_names, city_ok))
+        orders_info.append((order, restaurants_info))
 
     return render(
         request,

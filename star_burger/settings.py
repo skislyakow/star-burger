@@ -130,3 +130,5 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.BrowsableAPIRenderer",
     ]
 }
+
+YANDEX_GEOCODER_API_KEY = env("YANDEX_GEOCODER_API_KEY", "")
