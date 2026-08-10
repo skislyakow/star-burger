@@ -1,8 +1,7 @@
-import hashlib
-
 import requests
 from django.conf import settings
-from django.core.cache import cache
+
+from places.models import Place
 
 
 class GeocoderError(Exception):
@@ -27,20 +26,9 @@ def fetch_coordinates(address, apikey):
     return float(lat), float(lon)
 
 
-def _cache_key(address):
-    digest = hashlib.sha1(address.encode("utf-8")).hexdigest()
-    return f"geocoder:{digest}"
-
-
-def get_coordinates(address):
-    key = _cache_key(address)
-    coordinates = cache.get(key)
-    if coordinates:
-        return coordinates
+def _fetch_coordinates_safe(address):
     try:
-        coordinates = fetch_coordinates(
-            address, settings.YANDEX_GEOCODER_API_KEY
-        )
+        return fetch_coordinates(address, settings.YANDEX_GEOCODER_API_KEY)
     except (
         GeocoderError,
         requests.exceptions.RequestException,
@@ -49,5 +37,26 @@ def get_coordinates(address):
         ValueError,
     ):
         return None
-    cache.set(key, coordinates, timeout=3600)
-    return coordinates
+
+
+def get_coordinates_map(addresses):
+    addresses = set(addresses)
+    coordinates_by_address = {
+        address: (lat, lon)
+        for address, lat, lon in Place.objects.filter(
+            address__in=addresses
+        ).values_list("address", "lat", "lon")
+    }
+
+    missing = addresses - set(coordinates_by_address)
+    new_places = []
+    for address in missing:
+        coordinates = _fetch_coordinates_safe(address)
+        coordinates_by_address[address] = coordinates
+        if coordinates:
+            new_places.append(
+                Place(address=address, lat=coordinates[0], lon=coordinates[1])
+            )
+    if new_places:
+        Place.objects.bulk_create(new_places, ignore_conflicts=True)
+    return coordinates_by_address

@@ -25,7 +25,7 @@
       <th>Редактировать</th>
     </tr>
 
-    {% for item, restaurants in order_items %}
+    {% for item, restaurants, address_ok in order_items %}
       <tr>
         <td>{{ item.id }}</td>
         <td>{{ item.get_status_display }}</td>
@@ -38,13 +38,18 @@
         <td>
           {% if item.restaurant %}
             Готовит: {{ item.restaurant.name }}
-          {% elif restaurants %}
-            Могут приготовить:
-            {% for restaurant, distance in restaurants %}
-              {{ restaurant }}{% if distance %} - {{ distance|floatformat:'1' }} км{% endif %}<br/>
-            {% endfor %}
           {% else %}
-            <em>Ни один ресторан не может приготовить заказ</em>
+            {% if not address_ok %}
+              <em class="text-danger">Адрес не определился.</em><br/>
+            {% endif %}
+            {% if restaurants %}
+              Могут приготовить:
+              {% for restaurant, distance in restaurants %}
+                {{ restaurant }}{% if distance %} - {{ distance|floatformat:'1' }} км{% endif %}<br/>
+              {% endfor %}
+            {% else %}
+              <em class="text-danger">Ни один ресторан не может приготовить заказ.</em>
+            {% endif %}
           {% endif %}
         </td>
         <td><a href="{% url "admin:foodcartapp_order_change" object_id=item.id %}?next={{ request.path|urlencode }}">Редактировать</a></td>

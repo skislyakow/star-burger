@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 from django.db.models import Case, When, Value, IntegerField
 from geopy.distance import distance
 
-from foodcartapp.geocoder import get_coordinates
+from foodcartapp.geocoder import get_coordinates_map
 from foodcartapp.models import Order, Product, Restaurant, RestaurantMenuItem
 
 
@@ -150,6 +150,12 @@ def view_orders(request):
             set(),
         ).add(menu_item.restaurant_id)  # type: ignore[attr-defined]
 
+    addresses = {order.address for order in orders}
+    addresses.update(
+        restaurant.address for restaurant in restaurant_by_id.values()
+    )
+    coordinates_by_address = get_coordinates_map(addresses)
+
     for order in orders:
         available = None
         for item in order.items.all():
@@ -160,11 +166,13 @@ def view_orders(request):
             if not available:
                 break
 
-        order_coordinates = get_coordinates(order.address)
+        order_coordinates = coordinates_by_address.get(order.address)
         restaurants_info = []
         for restaurant_id in available or set():
             restaurant = restaurant_by_id[restaurant_id]
-            restaurant_coordinates = get_coordinates(restaurant.address)
+            restaurant_coordinates = coordinates_by_address.get(
+                restaurant.address
+            )
             distance_km = None
             if order_coordinates and restaurant_coordinates:
                 distance_km = distance(
@@ -175,7 +183,8 @@ def view_orders(request):
         restaurants_info.sort(
             key=lambda entry: (entry[1] is None, entry[1] or 0, entry[0])
         )
-        orders_info.append((order, restaurants_info))
+        address_ok = order_coordinates is not None
+        orders_info.append((order, restaurants_info, address_ok))
 
     return render(
         request,
