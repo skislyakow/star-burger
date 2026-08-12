@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.templatetags.static import static
 
-from .models import Product, Order
+from .models import Product
 from .serializers import OrderSerializer
 
 from rest_framework import status
@@ -71,13 +71,8 @@ def product_list_api(request):
     )
 
 
-@api_view(["GET", "POST"])
+@api_view(["POST"])
 def register_order(request):
-    if request.method == "GET":
-        orders = Order.objects.prefetch_related("items")
-        serializer = OrderSerializer(orders, many=True)
-        return Response(serializer.data)
-
     serializer = OrderSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     serializer.save()
