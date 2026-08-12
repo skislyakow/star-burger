@@ -55,10 +55,6 @@ def product_list_api(request):
             if product.category
             else None,
             "image": product.image.url,
-            "restaurant": {
-                "id": product.id,
-                "name": product.name,
-            },
         }
         dumped_products.append(dumped_product)
     return JsonResponse(
