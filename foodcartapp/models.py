@@ -170,7 +170,8 @@ class Order(models.Model):
         "способ оплаты",
         max_length=30,
         choices=PaymentMethod.choices,
-        default=PaymentMethod.CASH,
+        null=True,
+        blank=True,
         db_index=True,
     )
 

@@ -33,7 +33,13 @@
         <td>{{ item.phonenumber }}</td>
         <td>{{ item.address }}</td>
         <td>{{ item.total_cost }}</td>
-        <td>{{ item.get_payment_method_display }}</td>
+        <td>
+          {% if item.payment_method %}
+            {{ item.get_payment_method_display}}
+          {% else %}
+            <em class="text-danger">Не указан</em>
+          {% endif %}
+        </td>
         <td>{{ item.comment }}</td>
         <td>
           {% if item.restaurant %}
