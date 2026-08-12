@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 from django.db.models import Case, When, Value, IntegerField
 from geopy.distance import distance
 
-from foodcartapp.geocoder import get_coordinates_map
+from places.geocoder import get_coordinates_map
 from foodcartapp.models import Order, Product, Restaurant, RestaurantMenuItem
 
 

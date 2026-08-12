@@ -26,7 +26,7 @@ def fetch_coordinates(address, apikey):
     return float(lat), float(lon)
 
 
-def _fetch_coordinates_safe(address):
+def _fetch_coordinates_safe(address) -> tuple[float, float] | None:
     try:
         return fetch_coordinates(address, settings.YANDEX_GEOCODER_API_KEY)
     except (
@@ -39,9 +39,9 @@ def _fetch_coordinates_safe(address):
         return None
 
 
-def get_coordinates_map(addresses):
+def get_coordinates_map(addresses) -> dict[str, tuple[float, float] | None]:
     addresses = set(addresses)
-    coordinates_by_address = {
+    coordinates_by_address: dict[str, tuple[float, float] | None] = {
         address: (lat, lon)
         for address, lat, lon in Place.objects.filter(
             address__in=addresses
