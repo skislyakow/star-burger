@@ -112,9 +112,8 @@ def view_restaurants(request):
     )
 
 
-@user_passes_test(is_manager, login_url="restaurateur:login")
-def view_orders(request):
-    orders = (
+def get_open_orders():
+    return (
         Order.objects.exclude(status=Order.Status.COMPLETED)
         .select_related("restaurant")
         .prefetch_related("items")
@@ -131,65 +130,83 @@ def view_orders(request):
         .order_by("priority", "-created_at")
     )
 
-    menu_items = list(
-        RestaurantMenuItem.objects.select_related("restaurant").filter(
-            availability=True
+
+def load_restaurants() -> dict[int, Restaurant]:
+    return {r.id: r for r in Restaurant.objects.all()}
+
+
+def load_restaurants_for_product() -> dict[int, set[int]]:
+    menu_items = RestaurantMenuItem.objects.filter(
+        availability=True
+    ).values_list("product_id", "restaurant_id")
+    result = {}
+    for product_id, restaurant_id in menu_items:
+        result.setdefault(product_id, set()).add(restaurant_id)
+    return result
+
+
+def available_restaurants_for_order(
+    order, restaurants_for_product
+) -> set[int]:
+    available = None
+    for item in order.items.all():
+        restaurants = restaurants_for_product.get(item.product_id, set())
+        available = (
+            restaurants if available is None else (available & restaurants)
         )
-    )
+        if not available:
+            break
+    return available or set()
 
-    restaurant_by_id = {
-        restaurant.id: restaurant for restaurant in Restaurant.objects.all()
-    }
 
-    restaurants_for_product = {}
-    orders_info = []
+def distance_km(a, b) -> float | None:
+    if a and b:
+        return distance(a, b).km
+    return None
 
-    for menu_item in menu_items:
-        restaurants_for_product.setdefault(
-            menu_item.product_id,  # type: ignore[attr-defined]
-            set(),
-        ).add(menu_item.restaurant_id)  # type: ignore[attr-defined]
+
+def restaurant_offers(
+    order, restaurants_by_id, coordinates_by_address, restaurants_for_product
+):
+    order_coordinates = coordinates_by_address.get(order.address)
+    offers = []
+    for restaurant_id in available_restaurants_for_order(
+        order, restaurants_for_product
+    ):
+        restaurant = restaurants_by_id[restaurant_id]
+        coords = coordinates_by_address.get(restaurant.address)
+        offers.append(
+            (restaurant.name, distance_km(order_coordinates, coords))
+        )
+    offers.sort(key=lambda entry: (entry[1] is None, entry[1] or 0, entry[0]))
+    return offers
+
+
+@user_passes_test(is_manager, login_url="restaurateur:login")
+def view_orders(request):
+    orders = list(get_open_orders())
+    restaurants_by_id = load_restaurants()
+    restaurants_for_product = load_restaurants_for_product()
 
     addresses = {order.address for order in orders}
-    addresses.update(
-        restaurant.address for restaurant in restaurant_by_id.values()
-    )
+    addresses.update(r.address for r in restaurants_by_id.values())
     coordinates_by_address = get_coordinates_map(addresses)
 
-    for order in orders:
-        available = None
-        for item in order.items.all():
-            restaurants = restaurants_for_product.get(item.product_id, set())
-            available = (
-                restaurants if available is None else (available & restaurants)
-            )
-            if not available:
-                break
-
-        order_coordinates = coordinates_by_address.get(order.address)
-        restaurants_info = []
-        for restaurant_id in available or set():
-            restaurant = restaurant_by_id[restaurant_id]
-            restaurant_coordinates = coordinates_by_address.get(
-                restaurant.address
-            )
-            distance_km = None
-            if order_coordinates and restaurant_coordinates:
-                distance_km = distance(
-                    order_coordinates, restaurant_coordinates
-                ).km
-            restaurants_info.append((restaurant.name, distance_km))
-
-        restaurants_info.sort(
-            key=lambda entry: (entry[1] is None, entry[1] or 0, entry[0])
+    order_info = [
+        (
+            order,
+            restaurant_offers(
+                order,
+                restaurants_by_id,
+                coordinates_by_address,
+                restaurants_for_product,
+            ),
+            coordinates_by_address.get(order.address) is not None,
         )
-        address_ok = order_coordinates is not None
-        orders_info.append((order, restaurants_info, address_ok))
-
+        for order in orders
+    ]
     return render(
         request,
         template_name="order_items.html",
-        context={
-            "order_items": orders_info,
-        },
+        context={"order_items": order_info},
     )
