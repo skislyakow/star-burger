@@ -137,7 +137,7 @@ YANDEX_GEOCODER_API_KEY = env("YANDEX_GEOCODER_API_KEY", "")
 ROLLBAR_TOKEN = env("ROLLBAR_TOKEN", "")
 ROLLBAR = {
     "access_token": ROLLBAR_TOKEN,
-    "enviroment": env("ROLLBAR_ENVIROMENT", "development"),
+    "environment": env("ROLLBAR_ENVIRONMENT", "development"),
     "branch": "main",
     "root": BASE_DIR,
 }
