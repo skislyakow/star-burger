@@ -8,3 +8,4 @@ django-stubs==6.0.*
 djangorestframework==3.17.*
 requests==2.34.*
 geopy==2.5.*
+rollbar>=0.16.0

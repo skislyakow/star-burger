@@ -133,3 +133,18 @@ REST_FRAMEWORK = {
 }
 
 YANDEX_GEOCODER_API_KEY = env("YANDEX_GEOCODER_API_KEY", "")
+
+ROLLBAR_TOKEN = env("ROLLBAR_TOKEN", "")
+ROLLBAR = {
+    "access_token": ROLLBAR_TOKEN,
+    "enviroment": env("ROLLBAR_ENVIROMENT", "development"),
+    "branch": "main",
+    "root": BASE_DIR,
+}
+if ROLLBAR_TOKEN:
+    import rollbar
+
+    rollbar.init(**ROLLBAR)
+    MIDDLEWARE.append(
+        "rollbar.contrib.django.middleware.RollbarNotifierMiddleware"
+    )
