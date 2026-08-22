@@ -9,3 +9,5 @@ djangorestframework==3.17.*
 requests==2.34.*
 geopy==2.5.*
 rollbar>=0.16.0
+dj-database-url==3.*
+psycopg[binary]>=3.2
