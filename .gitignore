@@ -145,3 +145,5 @@ cython_debug/
 .parcel-cache/
 
 data.json
+staticfiles/
+db.sqlite3.*
