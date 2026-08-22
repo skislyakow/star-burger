@@ -101,25 +101,52 @@ npm ci
 
 На VDS живут ещё два сайта: `kislyakov.pro`→:8000 (dossier), `beauty.kislyakov.pro`→:8001 (beauty). Порт 80 занят nginx — **его не останавливать**, новый сайт вешается отдельным vhost'ом на порт 8002.
 
-### 1. Разовое обновление кода на сервере
+### 1. Деплой: `/root/deploy_star_burger.sh`
 
-```sh
+Рутина обновления автоматизирована bash-скриптом в домашней папке root'а (в репозиторий не входит — сервероспецифичен). Порядок действий при релизе: коммит → push → `ssh vds` → `~/deploy_star_burger.sh`.
+
+```bash
+#!/bin/bash
+
+set -e
+
 cd /opt/star-burger
+
+echo "=== git pull ==="
 git pull
-.venv/bin/pip install -r requirements.txt      # venv называется .venv (с точкой)!
-npm ci
+
+echo "=== pip install ==="
+.venv/bin/pip install -r requirements.txt -q
+
+echo "=== npm ci ==="
+npm ci --no-audit --no-fund
+
+echo "=== parcel build ==="
 ./node_modules/.bin/parcel build bundles-src/index.js --dist-dir bundles --public-url="./"
-.venv/bin/python manage.py collectstatic --noinput   # STATIC_ROOT = staticfiles/
-.venv/bin/python manage.py migrate
+
+echo "=== collectstatic ==="
+.venv/bin/python manage.py collectstatic --noinput
+
+echo "=== migrate ==="
+.venv/bin/python manage.py migrate --noinput
+
+echo "=== restart star-burger ==="
 systemctl restart star-burger
+
+echo "Deploy OK!"
 ```
+
+Ключевое: `set -e` роняет скрипт на первой же ошибке (до рестарта сервиса сайт не дойдёт — битая версия не выкатится); nginx при деплое не трогается; все команды линейные и копируются для ручного запуска.
+
+Грабли, на которых горели: путь к parcel — именно `./node_modules/.bin/parcel` (относительный, работает из-за `cd /opt/star-burger` выше). Без `./` bash ищет бинарник от корня ФС (`/node_modules/...`) и падает с `No such file or directory`.
 
 ### 2. systemd-юнит `/etc/systemd/system/star-burger.service`
 
 ```ini
 [Unit]
 Description=Star Burger Gunicorn Service
-After=network.target
+After=network.target postgresql.service
+Requires=postgresql.service
 
 [Service]
 Type=simple
@@ -141,6 +168,8 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
+
+`After=` + `Requires=` на `postgresql.service` гарантируют: при загрузке сервера база поднимется раньше сайта, а остановка Postgres останавливает и gunicorn (вместо работы с мёртвой БД). Проверка зависимостей: `systemctl list-dependencies star-burger.service`.
 
 Грабли, на которых уже горели:
 - путь именно **`.venv`** (с точкой), а не `venv`;
@@ -205,6 +234,16 @@ ln -s /etc/nginx/sites-available/star-burger.kislyakov.pro /etc/nginx/sites-enab
 nginx -t && systemctl reload nginx
 certbot --nginx -d star-burger.kislyakov.pro   # выпуск сертификата (нужен рабочий DNS)
 ```
+
+### 3.1. Автопродление сертификатов
+
+Сертификаты Let's Encrypt живут 3 месяца. Продление автоматизировано своим таймером (штатный `certbot.timer` из пакета отключён, чтобы не было двух планировщиков):
+
+- `/etc/systemd/system/certbot-renewal.timer` — `OnCalendar=weekly`, `Persistent=true`, `enabled`;
+- `/etc/systemd/system/certbot-renewal.service` — oneshot: `certbot -q renew --no-random-sleep-on-renew`;
+- хук `/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh` (`systemctl reload nginx`, исполняемый) — срабатывает только при фактическом продлении и заставляет nginx подхватить новые файлы сертификатов.
+
+Проверки: `systemctl list-timers | grep certbot-renewal` (ближайший запуск), `certbot renew --dry-run` (пробное продление через staging), ручной прогон `systemctl start certbot-renewal.service` — в `/var/log/letsencrypt/letsencrypt.log` появится «Certificate not yet due for renewal», а юнит останется в `inactive (dead)` — для oneshot это норма.
 
 ### 4. PostgreSQL на сервере
 

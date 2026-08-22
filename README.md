@@ -223,6 +223,57 @@ mv db.sqlite3 db.sqlite3.backup          # Linux
 - `ROLLBAR_TOKEN` — access-токен проекта [Rollbar](https://rollbar.com/) (тип `post_server_item`). Нужен для отправки сообщений об ошибках сайта в Rollbar. Это секрет: храните его только в `.env`, в репозиторий не выкладывайте. Без токена сайт работает как обычно, просто ошибки никуда не отправляются.
 - `ROLLBAR_ENVIRONMENT` — название окружения, которым помечаются ошибки в Rollbar. На боевом сервере ставьте `production`. Для локальных копий придумайте уникальное имя (например, `kislyakov-dev`), чтобы фильтровать свои ошибки отдельно от чужих и от боевых. Если переменную не задать, ошибки будут помечены как `development`.
 
+## Быстрое обновление кода на сервере
+
+Рутина деплоя автоматизирована bash-скриптом `/root/deploy_star_burger.sh`. Он:
+
+1. подтягивает свежий код (`git pull`);
+2. обновляет зависимости Python и Node.js;
+3. пересобирает фронтенд (Parcel) и статику Django;
+4. накатывает миграции;
+5. перезапускает gunicorn.
+
+Содержимое скрипта — линейные команды без ветвлений, каждую можно скопировать и запустить вручную в отдельном терминале:
+
+```bash
+#!/bin/bash
+
+set -e
+
+cd /opt/star-burger
+
+echo "=== git pull ==="
+git pull
+
+echo "=== pip install ==="
+.venv/bin/pip install -r requirements.txt -q
+
+echo "=== npm ci ==="
+npm ci --no-audit --no-fund
+
+echo "=== parcel build ==="
+./node_modules/.bin/parcel build bundles-src/index.js --dist-dir bundles --public-url="./"
+
+echo "=== collectstatic ==="
+.venv/bin/python manage.py collectstatic --noinput
+
+echo "=== migrate ==="
+.venv/bin/python manage.py migrate --noinput
+
+echo "=== restart star-burger ==="
+systemctl restart star-burger
+
+echo "Deploy OK!"
+```
+
+Директива `set -e` прерывает выполнение при первой же ошибке — сайт не получит поломанную версию, а nginx во время деплоя не останавливается.
+
+Порядок обновления:
+
+1. Сделайте коммит и отправьте его на GitHub.
+2. Подключитесь к серверу: `ssh vds`.
+3. Запустите деплой: `~/deploy_star_burger.sh`.
+
 ## Цели проекта
 
 Код написан в учебных целях — это урок в курсе по Python и веб-разработке на сайте [Devman](https://dvmn.org). За основу был взят код проекта [FoodCart](https://github.com/Saibharath79/FoodCart).
