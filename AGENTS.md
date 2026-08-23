@@ -133,10 +133,23 @@ echo "=== migrate ==="
 echo "=== restart star-burger ==="
 systemctl restart star-burger
 
+echo "=== notify rollbar ==="
+ROLLBAR_TOKEN=$(grep '^ROLLBAR_TOKEN=' .env | cut -d= -f2)
+ROLLBAR_ENVIRONMENT=$(grep '^ROLLBAR_ENVIRONMENT=' .env | cut -d= -f2)
+REVISION=$(git rev-parse HEAD)
+
+curl -sS https://api.rollbar.com/api/1/deploy/ \
+  -F access_token=$ROLLBAR_TOKEN \
+  -F environment=$ROLLBAR_ENVIRONMENT \
+  -F revision=$REVISION \
+  -F local_username=root
+
+echo
+
 echo "Deploy OK!"
 ```
 
-Ключевое: `set -e` роняет скрипт на первой же ошибке (до рестарта сервиса сайт не дойдёт — битая версия не выкатится); nginx при деплое не трогается; все команды линейные и копируются для ручного запуска.
+Ключевое: `set -e` роняет скрипт на первой же ошибке (до рестарта сервиса сайт не дойдёт — битая версия не выкатится); nginx при деплое не трогается; все команды линейные и копируются для ручного запуска. Уведомление Rollbar о деплое стоит в самом конце и уходит только после успешного рестарта (`set -e` гарантирует: упавший деплой не будет помечен как выкаченный). Токен берётся из `.env`, хэш коммита скрипт узнаёт сам через `git rev-parse HEAD` уже после `git pull`; ответ API `{"err":0,...}` = успех, запись появляется в Rollbar (лента Items + страница Deploys).
 
 Грабли, на которых горели: путь к parcel — именно `./node_modules/.bin/parcel` (относительный, работает из-за `cd /opt/star-burger` выше). Без `./` bash ищет бинарник от корня ФС (`/node_modules/...`) и падает с `No such file or directory`.
 

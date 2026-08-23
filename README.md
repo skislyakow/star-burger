@@ -231,7 +231,8 @@ mv db.sqlite3 db.sqlite3.backup          # Linux
 2. обновляет зависимости Python и Node.js;
 3. пересобирает фронтенд (Parcel) и статику Django;
 4. накатывает миграции;
-5. перезапускает gunicorn.
+5. перезапускает gunicorn;
+6. сообщает Rollbar о выкатке (Deploy Tracking: окружение + хэш коммита).
 
 Содержимое скрипта — линейные команды без ветвлений, каждую можно скопировать и запустить вручную в отдельном терминале:
 
@@ -263,10 +264,23 @@ echo "=== migrate ==="
 echo "=== restart star-burger ==="
 systemctl restart star-burger
 
+echo "=== notify rollbar ==="
+ROLLBAR_TOKEN=$(grep '^ROLLBAR_TOKEN=' .env | cut -d= -f2)
+ROLLBAR_ENVIRONMENT=$(grep '^ROLLBAR_ENVIRONMENT=' .env | cut -d= -f2)
+REVISION=$(git rev-parse HEAD)
+
+curl -sS https://api.rollbar.com/api/1/deploy/ \
+  -F access_token=$ROLLBAR_TOKEN \
+  -F environment=$ROLLBAR_ENVIRONMENT \
+  -F revision=$REVISION \
+  -F local_username=root
+
+echo
+
 echo "Deploy OK!"
 ```
 
-Директива `set -e` прерывает выполнение при первой же ошибке — сайт не получит поломанную версию, а nginx во время деплоя не останавливается.
+Директива `set -e` прерывает выполнение при первой же ошибке — сайт не получит поломанную версию, а nginx во время деплоя не останавливается. Уведомление Rollbar отправляется последним шагом: только после успешного рестарта сервиса. Токен читается из `.env` (в скрипте не хранится), хэш коммита берётся командой `git rev-parse HEAD` уже после `git pull`. Ответ API вида `{"err":0,...}` означает успех — запись о деплое появится в Rollbar (лента Items и страница Deploys).
 
 Порядок обновления:
 
