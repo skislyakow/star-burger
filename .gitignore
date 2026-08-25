@@ -147,3 +147,5 @@ cython_debug/
 data.json
 staticfiles/
 db.sqlite3.*
+
+#test
