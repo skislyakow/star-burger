@@ -6,10 +6,10 @@
 ![PostgreSQL](https://img.shields.io/badge/postgresql-16-4169E1?logo=postgresql&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-**Живой сайт:** <https://star-burger.kislyakov.pro>
-**Демо-панель менеджера:** <https://star-burger.kislyakov.pro/manager/login/> — логин `demo`, пароль `demo-star-burger`
-
 ![Витрина Star Burger](docs/screenshots/storefront.jpg)
+
+- **Живой сайт:** <https://star-burger.kislyakov.pro>
+- **Демо-панель менеджера:** <https://star-burger.kislyakov.pro/manager/login/> — логин `demo`, пароль `demo-star-burger`
 
 Сайт сети бургерных с доставкой: меню с корзиной, оформление заказа без
 регистрации, панель менеджера для обработки заказов и админка. Проект вырос из
@@ -113,7 +113,7 @@ docs/screenshots/   скриншоты для README
 
 ## Быстрый старт
 
-Нужны Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 18+ и Docker
+Нужны Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 20+ и Docker
 (для PostgreSQL; можно обойтись SQLite).
 
 ```powershell
