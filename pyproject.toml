@@ -23,8 +23,58 @@ dependencies = [
 dev = [
     "django-debug-toolbar>=5.2,<5.3",
     "django-stubs>=6.0,<6.1",
+    "djlint>=1.47.1",
+    "mypy>=2.4.0",
+    "pre-commit>=4.7.0",
+    "ruff>=0.17.2",
 ]
 
 [tool.uv]
 # Это Django-приложение, а не библиотека: ставим зависимости, но сам проект не собираем.
 package = false
+
+[tool.ruff]
+line-length = 79
+target-version = "py312"
+# Миграции генерирует Django — руками их не правят, поэтому линтер и
+# форматтер к ним не лезут.
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "DJ",  # flake8-django
+    "SIM", # flake8-simplify
+]
+# Длинные строки оформляет форматтер, отдельно про E501 не напоминаем.
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["foodcartapp", "places", "restaurateur", "star_burger"]
+
+[tool.djlint]
+profile = "django"
+indent = 2
+# H021 (inline styles) — на них держатся SVG-иконки в шаблонах;
+# H036 (br для отступов) и H050 (устаревший <center>) — унаследованная вёрстка,
+# переписывать её ради линтера не будем.
+ignore = "H021,H036,H050"
+
+[tool.django-stubs]
+django_settings_module = "star_burger.settings"
+
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+# Сторонние пакеты без стабов (geopy, rollbar) не повод падать.
+ignore_missing_imports = true
+exclude = "(^|/)migrations/"
+files = ["foodcartapp", "places", "restaurateur", "star_burger"]
+# Без этого mypy не понимает `from . import settings` в star_burger/urls.py:
+# пакеты лежат прямо в корне репозитория, а не в src/.
+mypy_path = "."
+explicit_package_bases = true

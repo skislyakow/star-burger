@@ -8,6 +8,7 @@
 - **БД**: PostgreSQL 16 (переехали со SQLite командами `dumpdata`/`loaddata`)
 - **Фронтенд**: Node.js + Parcel 2 (`npm ci`, сборка в `bundles/`)
 - **Мониторинг**: Rollbar (middleware подключается автоматически, если задан `ROLLBAR_TOKEN`)
+- **Качество кода**: `ruff` (линт + формат), `djlint` (шаблоны), `mypy` + `django-stubs` — всё прогоняется через `pre-commit`
 - **Прод**: nginx (80/443) → gunicorn `127.0.0.1:8002` под systemd
 
 ---
@@ -80,7 +81,31 @@ Rename-Item db.sqlite3 db.sqlite3.bak
 
 `data.json` содержит хэши паролей — **не коммитить** (добавлен в `.gitignore`).
 
-### 5. Запуск dev-версии
+### 5. Линтеры и pre-commit
+
+В dev-группе лежат `ruff`, `djlint`, `mypy` (+ `django-stubs`) и сам `pre-commit`. Настройки — в `pyproject.toml`:
+
+- `[tool.ruff]` — линт и формат Python, `line-length = 79` (стиль исходного курса), миграции исключены через `extend-exclude = ["*/migrations/*"]`;
+- `[tool.djlint]` — шаблоны, `profile = "django"`, `indent = 2`, игнорируются `H021/H036/H050` (инлайн-стили SVG, `<br>` для отступов, устаревший `<center>` — унаследованная вёрстка);
+- `[tool.mypy]` + `[tool.django-stubs]` — типы с плагином django-stubs. Без `mypy_path = "."` и `explicit_package_bases = true` mypy не понимает `from . import settings` в `star_burger/urls.py`.
+
+Установка git-хука (один раз в каждом клоне — `.git/hooks/` не коммитится):
+
+```powershell
+uv run pre-commit install
+uv run pre-commit run --all-files   # разовый прогон по всему проекту
+```
+
+Грабли, на которых горели:
+
+- в `args` хуков `ruff-check`/`ruff-format` нельзя дублировать `--force-exclude`: ruff-pre-commit передаёт его сам, и ruff падает с `the argument '--force-exclude' cannot be used multiple times`;
+- `mypy` подключён как `repo: local` с `entry: uv run mypy`, а не через `mirrors-mypy`: плагину нужен django-stubs из окружения проекта, а изолированное env pre-commit его не видит;
+- mypy импортирует `star_burger/settings.py`, поэтому без `.env` в корне он падает так же, как `runserver`;
+- корневой `__init__.py` пришлось удалить: из-за него mypy считал корень репозитория пакетом и ругался `star-burger contains __init__.py but is not a valid Python package name`;
+- `pre-commit run --all-files` смотрит только на *отслеживаемые* git файлы — новые, ещё не добавленные в индекс, он не проверяет;
+- на сервере хуки не нужны: там `uv sync --no-dev`, а `.git/hooks` в `/opt/star-burger` не устанавливаются.
+
+### 6. Запуск dev-версии
 
 ```powershell
 uv run python manage.py runserver          # терминал 1

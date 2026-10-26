@@ -1,0 +1,51 @@
+# Хуки, которые прогоняются перед каждым коммитом.
+#
+# Установка (один раз после `uv sync`):
+#   uv run pre-commit install
+# Прогнать по всем файлам вручную:
+#   uv run pre-commit run --all-files
+#
+# Конфиги линтеров живут в pyproject.toml: [tool.ruff], [tool.djlint], [tool.mypy].
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key
+      # print()/breakpoint() не должны уехать в прод.
+      - id: debug-statements
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.2
+    hooks:
+      # Хуки ruff-pre-commit сами передают --force-exclude, поэтому исключения
+      # из pyproject.toml (например, */migrations/*) работают и для файлов,
+      # которые pre-commit передаёт явно.
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/Riverside-Healthcare/djLint
+    rev: v1.47.1
+    hooks:
+      - id: djlint-reformat-django
+      - id: djlint-django
+
+  - repo: local
+    hooks:
+      # mypy запускается из окружения проекта, а не из изолированного env
+      # pre-commit: плагину django-stubs нужен сам Django и настройки проекта
+      # (star_burger.settings читает .env, поэтому файл .env должен быть на месте).
+      - id: mypy
+        name: mypy
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        require_serial: true
