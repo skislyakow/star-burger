@@ -4,7 +4,7 @@
 
 ## Стек
 
-- **Backend**: Django 5.2, Python (dev: 3.10 Windows, prod: 3.12 Ubuntu)
+- **Backend**: Django 5.2, Python (dev: 3.13 Windows, prod: 3.12 Ubuntu), зависимости через `uv` (`pyproject.toml` + `uv.lock`)
 - **БД**: PostgreSQL 16 (переехали со SQLite командами `dumpdata`/`loaddata`)
 - **Фронтенд**: Node.js + Parcel 2 (`npm ci`, сборка в `bundles/`)
 - **Мониторинг**: Rollbar (middleware подключается автоматически, если задан `ROLLBAR_TOKEN`)
@@ -16,13 +16,18 @@
 
 ### 1. Python-зависимости
 
+Ставятся через [uv](https://docs.astral.sh/uv/) — он сам создаёт `.venv` и ставит точные версии из `uv.lock`:
+
 ```powershell
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"   # один раз, если uv ещё нет
+uv sync
 ```
 
-Грабли: в `requirements.txt` только двойное `==` (`dj-database-url=3*` — невалидно, нужно `dj-database-url==3.*`).
+Требуется Python >= 3.12 (`requires-python` в `pyproject.toml`); если подходящего интерпретатора нет, uv скачает его сам.
+
+Грабли: `requirements.txt` больше нет — не возвращайте его. Зависимости правим в `pyproject.toml` командой `uv add <пакет>` (она же обновляет `uv.lock`), а не вручную; иначе `uv sync` перезапишет окружение по старому lock-файлу. `uv.lock` коммитится.
+
+Пакеты делятся на два набора: основные (`[project].dependencies` — Django, DRF, psycopg, gunicorn и т.д.) и `dev` (`[dependency-groups]` — `django-debug-toolbar`, `django-stubs`). `uv sync` ставит оба, `uv sync --no-dev` — только прод-набор. Поэтому `debug_toolbar` подключается в `settings.py` условно: `if DEBUG: INSTALLED_APPS.append("debug_toolbar")` — на проде он не установлен.
 
 ### 2. PostgreSQL через Docker
 
@@ -58,14 +63,14 @@ ROLLBAR_ENVIRONMENT=development
 # 1) Выгрузка ИЗ sqlite — строго ДО добавления DATABASE_URL в .env.
 #    Флаг -X utf8 обязателен на Windows: иначе файл пишется в cp1251,
 #    и loaddata потом падает с UnicodeDecodeError.
-python -X utf8 manage.py dumpdata --natural-foreign --natural-primary `
+uv run python -X utf8 manage.py dumpdata --natural-foreign --natural-primary `
   -e contenttypes -e auth.permission --indent 2 -o data.json
 
 # 2) Добавить DATABASE_URL в .env (шаг 3)
 
 # 3) Схема в пустом Postgres, затем данные:
-python manage.py migrate
-python manage.py loaddata data.json
+uv run python manage.py migrate
+uv run python manage.py loaddata data.json
 
 # 4) Убрать sqlite (сайт должен жить без него):
 Rename-Item db.sqlite3 db.sqlite3.bak
@@ -78,7 +83,7 @@ Rename-Item db.sqlite3 db.sqlite3.bak
 ### 5. Запуск dev-версии
 
 ```powershell
-python manage.py runserver          # терминал 1
+uv run python manage.py runserver          # терминал 1
 .\node_modules\.bin\parcel watch bundles-src/index.js --dist-dir bundles --public-url="./"   # терминал 2 (если меняешь фронт)
 ```
 
@@ -101,6 +106,20 @@ npm ci
 
 На VDS живут ещё два сайта: `kislyakov.pro`→:8000 (dossier), `beauty.kislyakov.pro`→:8001 (beauty). Порт 80 занят nginx — **его не останавливать**, новый сайт вешается отдельным vhost'ом на порт 8002.
 
+### 0. uv на сервере
+
+Зависимости Python ставит `uv` — тот же, что локально. Один раз:
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh    # бинарник в /root/.local/bin/uv
+```
+
+`uv sync --frozen --no-dev` в каталоге `/opt/star-burger` ставит ровно те версии, что записаны в `uv.lock`, создаёт/переиспользует `.venv` и **не трогает lock-файл** (флаг `--frozen`; без него uv попытается перерешать зависимости на сервере). `--no-dev` пропускает `django-debug-toolbar` и `django-stubs` — на проде они не нужны, а `settings.py` подключает панель только при `DEBUG=True`.
+
+Грабли: `gunicorn` не был ни в `requirements.txt`, ни в `pyproject.toml` — он когда-то ставился в серверный `.venv` руками. `uv sync` вычищает из окружения всё, чего нет в lock-файле, поэтому gunicorn **обязан** быть в `[project].dependencies` (сейчас там есть). Если после перехода на uv systemd падает с `No such file or directory` на `.venv/bin/gunicorn` — значит его вычистили: верните в `pyproject.toml` и повторите `uv sync`.
+
+`pip` в окружении от uv нет — команды вида `.venv/bin/pip install` на сервере больше не работают. Вместо них `.venv/bin/python -m pip` не появится тоже: ставьте пакеты через `uv add` локально и деплойте lock-файл.
+
 ### 1. Деплой: `/root/deploy_star_burger.sh`
 
 Рутина обновления автоматизирована bash-скриптом в домашней папке root'а (в репозиторий не входит — сервероспецифичен). Порядок действий при релизе: коммит → push → `ssh vds` → `~/deploy_star_burger.sh`.
@@ -115,8 +134,8 @@ cd /opt/star-burger
 echo "=== git pull ==="
 git pull
 
-echo "=== pip install ==="
-.venv/bin/pip install -r requirements.txt -q
+echo "=== uv sync ==="
+uv sync --frozen --no-dev
 
 echo "=== npm ci ==="
 npm ci --no-audit --no-fund
@@ -296,6 +315,9 @@ systemctl start star-burger
 | Сервис в рестарт-цикле | смотреть `journalctl`; типовые причины: нет каталога логов, неверный путь к venv |
 | `That port is already in use` | порт занят другим сайтом; свободный диапазон уточнить `ss -tlnp` |
 | npm `Killed` | не хватило RAM (на VDS 1.8G); добавить swap или собрать бандлы локально и залить |
+| `uv: command not found` | uv не в `PATH` у root'а: `ls /root/.local/bin/uv`, затем `source $HOME/.profile` или `/root/.local/bin/uv sync --frozen --no-dev` |
+| `uv sync` падает с `Failed to resolve` | на сервере нет Python >= 3.12 или правлен `pyproject.toml` без обновления `uv.lock`; локально `uv lock`, закоммитить и деплоить снова (на сервере `--frozen` намеренно не даёт перерешать зависимости) |
+| `No such file or directory` на `.venv/bin/gunicorn` | gunicorn вычищен из окружения, потому что пропал из `pyproject.toml`; вернуть в `[project].dependencies`, `uv lock`, задеплоить |
 | Ошибки SSL в браузере | сертификат чужого домена = vhost без своего 443-блока/сертификата; выпустить certbot'ом |
 
 Финальная проверка продакшена:

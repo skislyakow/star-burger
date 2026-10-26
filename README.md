@@ -31,30 +31,35 @@ git clone https://github.com/devmanorg/star-burger.git
 cd star-burger
 ```
 
-[Установите Python](https://www.python.org/), если этого ещё не сделали.
+Зависимости Python ставятся через [uv](https://docs.astral.sh/uv/). Он сам скачает нужную версию Python и создаст виртуальное окружение `.venv`.
 
-Проверьте, что `python` установлен и корректно настроен. Запустите его в командной строке:
+Установите uv, если его ещё нет:
+
 ```sh
-python --version
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
-**Важно!** Версия Python должна быть не ниже 3.10.
+```powershell
+# Windows
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
-Возможно, вместо команды `python` здесь и в остальных инструкциях этого README придётся использовать `python3`. Зависит это от операционной системы и от того, установлен ли у вас Python старой второй версии. 
+Затем в каталоге проекта выполните:
 
-В каталоге проекта создайте виртуальное окружение:
 ```sh
-python -m venv venv
+uv sync
 ```
-Активируйте его. На разных операционных системах это делается разными командами:
 
-- Windows: `.\venv\Scripts\activate`
-- MacOS/Linux: `source venv/bin/activate`
+uv прочитает `pyproject.toml`, поставит точные версии из `uv.lock` в `.venv` и не тронет версии, на которых проект проверен. **Важно!** Версия Python должна быть не ниже 3.12 — если в системе её нет, uv скачает её сам.
 
+Отдельно активировать окружение не обязательно: команды запускаются через `uv run` (`uv run python manage.py runserver`), а uv сам подхватывает `.venv`. Активация нужна только если хочется работать в нём вручную:
 
-Установите зависимости в виртуальное окружение:
-```sh
-pip install -r requirements.txt
-```
+- Windows: `.\.venv\Scripts\activate`
+- MacOS/Linux: `source .venv/bin/activate`
+
+`requirements.txt` в проекте больше нет: список зависимостей живёт в `pyproject.toml`, а зафиксированные версии — в `uv.lock`. Оба файла хранятся в репозитории. Новая зависимость добавляется командой `uv add <пакет>`, обновление версий — `uv lock --upgrade`.
+
+`django-debug-toolbar` и `django-stubs` — dev-зависимости, они лежат в группе `dev`. `uv sync` ставит их по умолчанию, а на боевом сервере используется `uv sync --no-dev`: панель отладки там не нужна и в `settings.py` подключается только при `DEBUG=True`.
 
 ### Поднимите PostgreSQL
 
@@ -95,13 +100,13 @@ DEBUG=True
 Создайте таблицы в пустой базе следующей командой:
 
 ```sh
-python manage.py migrate
+uv run python manage.py migrate
 ```
 
 Запустите сервер:
 
 ```sh
-python manage.py runserver
+uv run python manage.py runserver
 ```
 
 Откройте сайт в браузере по адресу [http://127.0.0.1:8000/](http://127.0.0.1:8000/). Если вы увидели пустую белую страницу, то не пугайтесь, выдохните. Просто фронтенд пока ещё не собран. Переходите к следующему разделу README.
@@ -174,7 +179,7 @@ Parcel будет следить за файлами в каталоге `bundle
 1. Выгрузите данные из старой базы. Пока в `.env` нет переменной `DATABASE_URL`, Django работает с файлом `db.sqlite3` — это то, что нужно:
 
 ```sh
-python -X utf8 manage.py dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.permission --indent 2 -o data.json
+uv run python -X utf8 manage.py dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.permission --indent 2 -o data.json
 ```
 
 Флаг `-X utf8` обязателен на Windows: без него Python запишет файл в кодировке локали (cp1251), и `loaddata` затем упадёт с `UnicodeDecodeError`. На Linux/macOS флаг не нужен.
@@ -184,13 +189,13 @@ python -X utf8 manage.py dumpdata --natural-foreign --natural-primary -e content
 2. Добавьте `DATABASE_URL` в `.env` и создайте схему таблиц в пустом Postgres:
 
 ```sh
-python manage.py migrate
+uv run python manage.py migrate
 ```
 
 3. Залейте данные:
 
 ```sh
-python manage.py loaddata data.json
+uv run python manage.py loaddata data.json
 ```
 
 4. Уберите старый файл базы — сайт должен работать и без него:
@@ -204,7 +209,7 @@ mv db.sqlite3 db.sqlite3.backup          # Linux
 
 Файл `data.json` содержит хэши паролей пользователей — **не выкладывайте его в репозиторий** (он добавлен в `.gitignore`).
 
-Проверьте себя: количество записей до и после переезда должно совпадать. Удобно сверять в shell: `python manage.py shell -c 'from foodcartapp.models import Order; print(Order.objects.count())'`.
+Проверьте себя: количество записей до и после переезда должно совпадать. Удобно сверять в shell: `uv run python manage.py shell -c 'from foodcartapp.models import Order; print(Order.objects.count())'`.
 
 
 ## Как запустить prod-версию сайта
@@ -227,6 +232,14 @@ mv db.sqlite3 db.sqlite3.backup          # Linux
 
 ## Быстрое обновление кода на сервере
 
+Зависимости Python на сервере ставит [uv](https://docs.astral.sh/uv/) — тот же менеджер, что и локально. Один раз установите его:
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh   # бинарник в /root/.local/bin/uv
+```
+
+`uv sync --frozen --no-dev` ставит ровно те версии, что записаны в `uv.lock`, и не трогает lock-файл на сервере. Флаг `--no-dev` не ставит `django-debug-toolbar` и `django-stubs`: в дебаг-панели на проде нет нужды, а `settings.py` подключает её только при `DEBUG=True`.
+
 Рутина деплоя автоматизирована bash-скриптом `/root/deploy_star_burger.sh`. Он:
 
 1. подтягивает свежий код (`git pull`);
@@ -248,8 +261,8 @@ cd /opt/star-burger
 echo "=== git pull ==="
 git pull
 
-echo "=== pip install ==="
-.venv/bin/pip install -r requirements.txt -q
+echo "=== uv sync ==="
+uv sync --frozen --no-dev
 
 echo "=== npm ci ==="
 npm ci --no-audit --no-fund

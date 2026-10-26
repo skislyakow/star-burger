@@ -1,0 +1,30 @@
+[project]
+name = "star-burger"
+version = "0.1.0"
+description = "Сайт доставки еды Star Burger"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.2,<5.3",
+    "djangorestframework>=3.17,<3.18",
+    "pillow>=11.2,<11.3",
+    "environs[django]>=14.2,<14.3",
+    "django-phonenumber-field>=8.5,<8.6",
+    "phonenumbers>=9.0,<9.1",
+    "requests>=2.34,<2.35",
+    "geopy>=2.5,<2.6",
+    "rollbar>=0.16.0",
+    "dj-database-url>=3,<4",
+    "psycopg[binary]>=3.2",
+    "gunicorn>=23.0",
+]
+
+[dependency-groups]
+dev = [
+    "django-debug-toolbar>=5.2,<5.3",
+    "django-stubs>=6.0,<6.1",
+]
+
+[tool.uv]
+# Это Django-приложение, а не библиотека: ставим зависимости, но сам проект не собираем.
+package = false
