@@ -79,6 +79,8 @@ uv run pre-commit run --all-files
 
 Список хуков — в `.pre-commit-config.yaml`. mypy работает из окружения проекта, поэтому ему нужен `.env` в корне: он импортирует `star_burger/settings.py`, а тот читает переменные окружения (как и `runserver`).
 
+Те же проверки гоняются в GitHub Actions (`.github/workflows/ci.yml`) на каждый push в `main`, на pull request и по кнопке вручную: `pre-commit` по всем файлам, `manage.py check` в боевых и dev-настройках и контроль того, что все изменения моделей оформлены миграциями. Локально тот же набор воспроизводится одной командой `uv run pre-commit run --all-files`.
+
 ### Поднимите PostgreSQL
 
 Сайт работает на PostgreSQL 16. Проще всего поднять её в Docker (Docker Desktop должен быть запущен):

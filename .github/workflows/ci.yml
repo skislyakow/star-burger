@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Linters, types and Django checks
+    runs-on: ubuntu-latest
+    env:
+      # settings.py читает SECRET_KEY через environs уже при импорте, а mypy
+      # (плагин django-stubs) этот модуль импортирует. В CI файла .env нет,
+      # поэтому переменные задаём здесь.
+      SECRET_KEY: ci-insecure-key
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # Та же версия Python, что на боевом сервере.
+          python-version: "3.12"
+
+      - name: Install dependencies
+        # --frozen: ставим ровно то, что в uv.lock, и падаем, если lock
+        # разошёлся с pyproject.toml.
+        run: uv sync --frozen
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit
+        run: uv run pre-commit run --all-files --show-diff-on-failure --color=always
+
+      - name: Django checks (production settings)
+        env:
+          DEBUG: "False"
+        run: uv run python manage.py check
+
+      - name: Django checks (development settings)
+        env:
+          DEBUG: "True"
+        run: uv run python manage.py check
+
+      - name: Check for missing migrations
+        run: uv run python manage.py makemigrations --check --dry-run

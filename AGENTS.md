@@ -105,6 +105,10 @@ uv run pre-commit run --all-files   # разовый прогон по всем�
 - `pre-commit run --all-files` смотрит только на *отслеживаемые* git файлы — новые, ещё не добавленные в индекс, он не проверяет;
 - на сервере хуки не нужны: там `uv sync --no-dev`, а `.git/hooks` в `/opt/star-burger` не устанавливаются.
 
+Тот же набор проверок крутится в GitHub Actions — `.github/workflows/ci.yml`, workflow `CI`. Триггеры: push в `main`, любой pull request, ручной запуск (`workflow_dispatch`). Шаги: `actions/checkout@v7` → `astral-sh/setup-uv@v7` (Python 3.12, как на сервере) → `uv sync --frozen` → кэш `~/.cache/pre-commit` по хэшу `.pre-commit-config.yaml` → `pre-commit run --all-files --show-diff-on-failure` → `manage.py check` с `DEBUG=False` и с `DEBUG=True` → `makemigrations --check --dry-run` (ловит забытые миграции).
+
+Грабли: в CI нет `.env`, а `settings.py` читает `SECRET_KEY` уже при импорте (его же импортирует mypy через django-stubs), поэтому в job задан `env.SECRET_KEY`. Остальные переменные не нужны: без `DATABASE_URL` Django работает на локальном SQLite. `uv sync --frozen` заодно роняет сборку, если `uv.lock` разошёлся с `pyproject.toml`. Проверить workflow локально: `uvx --from actionlint-py actionlint .github/workflows/ci.yml`.
+
 ### 6. Запуск dev-версии
 
 ```powershell
