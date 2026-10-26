@@ -39,8 +39,10 @@
 - интеграция с Rollbar (middleware включается только при заданном токене);
 - управление зависимостями через `uv` (lock-файл в репозитории);
 - pre-commit: `ruff`, `djlint`, `mypy` + `django-stubs`;
-- GitHub Actions: линтеры, `manage.py check` с `DEBUG=True/False`, проверка
-  неприменённых миграций;
+- тесты на `pytest-django`: оформление заказа, подбор ресторана, статусы,
+  доступ к доске менеджера и кэш геокодера;
+- GitHub Actions: линтеры, тесты, `manage.py check` с `DEBUG=True/False`,
+  проверка неприменённых миграций;
 - деплой: `git pull` → `uv sync` → сборка фронта → `collectstatic` → `migrate` →
   рестарт systemd-сервиса (см. [AGENTS.md](AGENTS.md)).
 
@@ -67,7 +69,7 @@
 | Frontend | React 17, Bootstrap 3, Parcel 2 |
 | Геоданные | Яндекс.Геокодер + `geopy` |
 | Мониторинг | Rollbar |
-| Качество | `ruff`, `djlint`, `mypy`, `pre-commit`, GitHub Actions |
+| Качество | `ruff`, `djlint`, `mypy`, `pre-commit`, `pytest-django`, GitHub Actions |
 | Прод | gunicorn, nginx, systemd, certbot |
 
 ## Как устроено
@@ -185,6 +187,7 @@ uv run python manage.py runserver
 | `uv run python manage.py seed_demo --orders 6` | демо-данные и демо-менеджер |
 | `uv run python manage.py check --deploy` | аудит прод-настроек безопасности |
 | `uv run pre-commit run --all-files` | линтеры, формат и типы |
+| `uv run pytest` | тесты (pytest-django) |
 | `.\node_modules\.bin\parcel build bundles-src/index.js --dist-dir bundles --public-url="./"` | сборка фронта |
 
 ## Качество кода
@@ -192,12 +195,32 @@ uv run python manage.py runserver
 - `ruff` — линт и формат Python (длина строки 79);
 - `djlint` — форматирование Django-шаблонов;
 - `mypy` + `django-stubs` — проверка типов;
+- `pytest-django` — тесты;
 - CI прогоняет всё это на каждый push и pull request, плюс `manage.py check`
   с `DEBUG=True` и `DEBUG=False` и `makemigrations --check`.
 
-Что дальше: автотестов пока нет — следующий шаг — `pytest-django` на сценарии
-заказа, сумму, доступность блюд и геокодер; затем вынос правил доступности и
-смены статусов из шаблонов и админки в отдельные модули.
+Тесты (`tests/`, 49 штук) проверяют то, что раньше держалось на честном слове:
+
+- `test_order_placement.py` — снимок цены, схлопывание повторяющихся позиций,
+  отказ для недоступного товара и отсутствие «полузаказа» при ошибке;
+- `test_fulfillment.py` — пересечение меню ресторанов, расстояния, сортировка
+  и один вызов геокодера на всю страницу;
+- `test_status_transitions.py` — даты звонка и доставки, авто-статус «Собран»
+  при назначении ресторана в админке;
+- `test_manager_access.py` — доступ к доске менеджера только для staff и
+  сборка таблицы из данных заказа;
+- `test_geocoder.py` — кэш `Place`, разбор ответа Яндекса и молчаливый отказ
+  без падения страницы.
+
+`pytest-django` создаёт отдельную тестовую базу. Если локальный PostgreSQL не
+запущен, тесты можно прогнать на SQLite:
+
+```powershell
+$env:DATABASE_URL="sqlite:///C:/code/star-burger/db.sqlite3"; uv run pytest
+```
+
+Что дальше: фронтенд (`App.js` разбить на api-клиент и корзину, добавить
+vitest) и прод-настройки безопасности из `manage.py check --deploy`.
 
 ## Деплой
 

@@ -157,6 +157,17 @@ class OrderAdmin(admin.ModelAdmin):
         return response
 
     def save_model(self, request, obj, form, change):
+        submitted_status = obj.status
+        if change:
+            previous_status = (
+                Order.objects.filter(pk=obj.pk)
+                .values_list("status", flat=True)
+                .first()
+            )
+            if previous_status is not None:
+                obj.status = previous_status
         if obj.restaurant_id and obj.status == Order.Status.UNPROCESSED:
-            obj.status = Order.Status.ASSEMBLED
+            obj.transition_to(Order.Status.ASSEMBLED)
+        else:
+            obj.transition_to(submitted_status)
         super().save_model(request, obj, form, change)

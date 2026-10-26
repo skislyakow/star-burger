@@ -26,6 +26,8 @@ dev = [
     "djlint>=1.47.1",
     "mypy>=2.4.0",
     "pre-commit>=4.7.0",
+    "pytest>=9.1.1",
+    "pytest-django>=4.14.0",
     "ruff>=0.17.2",
 ]
 
@@ -73,8 +75,15 @@ plugins = ["mypy_django_plugin.main"]
 # Сторонние пакеты без стабов (geopy, rollbar) не повод падать.
 ignore_missing_imports = true
 exclude = "(^|/)migrations/"
-files = ["foodcartapp", "places", "restaurateur", "star_burger"]
+files = ["foodcartapp", "places", "restaurateur", "star_burger", "tests"]
 # Без этого mypy не понимает `from . import settings` в star_burger/urls.py:
 # пакеты лежат прямо в корне репозитория, а не в src/.
 mypy_path = "."
 explicit_package_bases = true
+
+[tool.pytest.ini_options]
+# Тесты идут на тех же настройках, что и приложение; тестовую базу
+# pytest-django создаёт сама и рабочую не трогает.
+DJANGO_SETTINGS_MODULE = "star_burger.settings"
+python_files = ["test_*.py"]
+addopts = "-q"

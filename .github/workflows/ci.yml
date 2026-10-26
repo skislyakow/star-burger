@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   checks:
-    name: Linters, types and Django checks
+    name: Linters, types, tests and Django checks
     runs-on: ubuntu-latest
     env:
       # settings.py читает SECRET_KEY через environs уже при импорте, а mypy
@@ -58,3 +58,8 @@ jobs:
 
       - name: Check for missing migrations
         run: uv run python manage.py makemigrations --check --dry-run
+
+      - name: Tests
+        # pytest-django сама создаёт тестовую базу; без DATABASE_URL Django
+        # берёт локальный SQLite, поэтому Postgres в CI не нужен.
+        run: uv run pytest

@@ -8,7 +8,7 @@
 - **БД**: PostgreSQL 16 (переехали со SQLite командами `dumpdata`/`loaddata`)
 - **Фронтенд**: Node.js + Parcel 2 (`npm ci`, сборка в `bundles/`)
 - **Мониторинг**: Rollbar (middleware подключается автоматически, если задан `ROLLBAR_TOKEN`)
-- **Качество кода**: `ruff` (линт + формат), `djlint` (шаблоны), `mypy` + `django-stubs` — всё прогоняется через `pre-commit`
+- **Качество кода**: `ruff` (линт + формат), `djlint` (шаблоны), `mypy` + `django-stubs`, `pytest` + `pytest-django` — линтеры прогоняются через `pre-commit`
 - **Прод**: nginx (80/443) → gunicorn `127.0.0.1:8002` под systemd
 
 ---
@@ -117,13 +117,36 @@ uv run python manage.py runserver 127.0.0.1:8010 --noreload
 удалить. Скрипт съёмки лежит вне репозитория (как и скиллы); в репо попадают
 только готовые картинки.
 
-### 5. Линтеры и pre-commit
+### 5. Линтеры, тесты и pre-commit
 
-В dev-группе лежат `ruff`, `djlint`, `mypy` (+ `django-stubs`) и сам `pre-commit`. Настройки — в `pyproject.toml`:
+В dev-группе лежат `ruff`, `djlint`, `mypy` (+ `django-stubs`), `pytest` с `pytest-django` и сам `pre-commit`. Настройки — в `pyproject.toml`:
 
 - `[tool.ruff]` — линт и формат Python, `line-length = 79` (стиль исходного курса), миграции исключены через `extend-exclude = ["*/migrations/*"]`;
 - `[tool.djlint]` — шаблоны, `profile = "django"`, `indent = 2`, игнорируются `H021/H036/H050` (инлайн-стили SVG, `<br>` для отступов, устаревший `<center>` — унаследованная вёрстка);
-- `[tool.mypy]` + `[tool.django-stubs]` — типы с плагином django-stubs. Без `mypy_path = "."` и `explicit_package_bases = true` mypy не понимает `from . import settings` в `star_burger/urls.py`.
+- `[tool.mypy]` + `[tool.django-stubs]` — типы с плагином django-stubs. Без `mypy_path = "."` и `explicit_package_bases = true` mypy не понимает `from . import settings` в `star_burger/urls.py`;
+- `[tool.pytest.ini_options]` — `DJANGO_SETTINGS_MODULE = "star_burger.settings"`; pytest-django сама создаёт тестовую базу и рабочую не трогает.
+
+Тесты лежат в `tests/`, запуск:
+
+```powershell
+uv run pytest
+```
+
+- `test_order_placement.py` — API `/api/order/`: снимок цены, повторяющиеся позиции, недоступный товар, отсутствие «полузаказа» при ошибке;
+- `test_fulfillment.py` — подбор ресторана по пересечению меню, расстояния и сортировка;
+- `test_status_transitions.py` — `Order.transition_to()` и авто-статус «Собран» в админке;
+- `test_manager_access.py` — доска менеджера только для staff, логин, сборка таблицы;
+- `test_geocoder.py` — кэш `Place`, разбор ответа Яндекса, молчаливый отказ.
+
+Доменные правила вынесены из вьюх и админки: `foodcartapp/orders.py` (`place_order` — валидация позиций и снимок цены), `foodcartapp/fulfillment.py` (`FulfillmentService` — кто может приготовить заказ и как далеко везти), `Order.transition_to()` (`foodcartapp/models.py` — статусы и даты `called_at`/`delivered_at`). Сериализатор, доска менеджера и `OrderAdmin` только делегируют им.
+
+Грабли: `.env` локально указывает на PostgreSQL, поэтому `uv run pytest` без запущенного Docker-контейнера упадёт на подключении. Тесты не требуют Postgres — можно подставить SQLite:
+
+```powershell
+$env:DATABASE_URL="sqlite:///C:/code/star-burger/db.sqlite3"; uv run pytest
+```
+
+В CI переменная `DATABASE_URL` не задана, поэтому тесты там идут на SQLite автоматически.
 
 Установка git-хука (один раз в каждом клоне — `.git/hooks/` не коммитится):
 
@@ -141,7 +164,7 @@ uv run pre-commit run --all-files   # разовый прогон по всем�
 - `pre-commit run --all-files` смотрит только на *отслеживаемые* git файлы — новые, ещё не добавленные в индекс, он не проверяет;
 - на сервере хуки не нужны: там `uv sync --no-dev`, а `.git/hooks` в `/opt/star-burger` не устанавливаются.
 
-Тот же набор проверок крутится в GitHub Actions — `.github/workflows/ci.yml`, workflow `CI`. Триггеры: push в `main`, любой pull request, ручной запуск (`workflow_dispatch`). Шаги: `actions/checkout@v7` → `astral-sh/setup-uv@v7` (Python 3.12, как на сервере) → `uv sync --frozen` → кэш `~/.cache/pre-commit` по хэшу `.pre-commit-config.yaml` → `pre-commit run --all-files --show-diff-on-failure` → `manage.py check` с `DEBUG=False` и с `DEBUG=True` → `makemigrations --check --dry-run` (ловит забытые миграции).
+Тот же набор проверок крутится в GitHub Actions — `.github/workflows/ci.yml`, workflow `CI`. Триггеры: push в `main`, любой pull request, ручной запуск (`workflow_dispatch`). Шаги: `actions/checkout@v7` → `astral-sh/setup-uv@v7` (Python 3.12, как на сервере) → `uv sync --frozen` → кэш `~/.cache/pre-commit` по хэшу `.pre-commit-config.yaml` → `pre-commit run --all-files --show-diff-on-failure` → `manage.py check` с `DEBUG=False` и с `DEBUG=True` → `makemigrations --check --dry-run` (ловит забытые миграции) → `uv run pytest`.
 
 Грабли: в CI нет `.env`, а `settings.py` читает `SECRET_KEY` уже при импорте (его же импортирует mypy через django-stubs), поэтому в job задан `env.SECRET_KEY`. Остальные переменные не нужны: без `DATABASE_URL` Django работает на локальном SQLite. `uv sync --frozen` заодно роняет сборку, если `uv.lock` разошёлся с `pyproject.toml`. Проверить workflow локально: `uvx --from actionlint-py actionlint .github/workflows/ci.yml`.
 

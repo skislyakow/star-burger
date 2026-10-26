@@ -1,7 +1,7 @@
-from django.db import transaction
 from rest_framework import serializers
 
 from .models import Order, OrderItem
+from .orders import OrderError, OrderLine, place_order
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -48,13 +48,19 @@ class OrderSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        with transaction.atomic():
-            products = validated_data.pop("products")
-            order = Order.objects.create(**validated_data)
-            for product_data in products:
-                OrderItem.objects.create(
-                    order=order,
-                    price=product_data["product"].price,
-                    **product_data,
-                )
-        return order
+        products = validated_data.pop("products")
+        try:
+            return place_order(
+                **validated_data,
+                lines=[
+                    OrderLine(
+                        product_id=item["product"].id,
+                        quantity=item["quantity"],
+                    )
+                    for item in products
+                ],
+            )
+        except OrderError as error:
+            raise serializers.ValidationError(
+                {"products": str(error)}
+            ) from error

@@ -2,6 +2,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import DecimalField, F, Sum, Value
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 from phonenumber_field.modelfields import PhoneNumberField
 
 
@@ -40,7 +41,7 @@ class ProductCategory(models.Model):
 
 
 class ProductQuerySet(models.QuerySet):
-    def available(self):
+    def available(self) -> "ProductQuerySet":
         products = RestaurantMenuItem.objects.filter(
             availability=True
         ).values_list("product")
@@ -48,8 +49,11 @@ class ProductQuerySet(models.QuerySet):
 
 
 class ProductManager(models.Manager):
-    def get_queryset(self) -> models.QuerySet:
+    def get_queryset(self) -> ProductQuerySet:
         return ProductQuerySet(self.model, using=self._db)
+
+    def available(self) -> ProductQuerySet:
+        return self.get_queryset().available()
 
 
 class Product(models.Model):
@@ -193,6 +197,30 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Заказ #{self.id}: {self.firstname} {self.lastname}"
+
+    def transition_to(
+        self, status: str, *, restaurant: Restaurant | None = None
+    ) -> None:
+        """Переводит заказ в новый статус и проставляет даты событий.
+
+        `called_at` фиксируется, когда заказ впервые уходит из
+        «Необработанного»: значит, менеджер уже связался с клиентом.
+        `delivered_at` — при переходе в «Доставлен». Повторный перевод
+        в тот же статус даты не перезаписывает. Сохраняет вызывающий.
+        """
+        if status not in Order.Status.values:
+            raise ValueError(f"Неизвестный статус заказа: {status}")
+        if (
+            self.status == Order.Status.UNPROCESSED
+            and status != Order.Status.UNPROCESSED
+            and self.called_at is None
+        ):
+            self.called_at = timezone.localdate()
+        self.status = status
+        if restaurant is not None:
+            self.restaurant = restaurant
+        if status == Order.Status.DELIVERED and self.delivered_at is None:
+            self.delivered_at = timezone.now()
 
 
 class OrderItem(models.Model):
