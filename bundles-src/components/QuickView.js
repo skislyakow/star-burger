@@ -1,27 +1,41 @@
-import React,{Component} from 'react';
-import {Modal} from 'react-bootstrap';
-import {Table} from 'react-bootstrap';
-import {Button} from 'react-bootstrap';
+import React, { Component } from 'react';
+import { Modal } from 'react-bootstrap';
+import { Table } from 'react-bootstrap';
+import { Button } from 'react-bootstrap';
 
-class QuickView extends Component{
-  render(){
+import { formatPrice } from '../format';
+
+class QuickView extends Component {
+  render() {
     const imageSizing = {
-      maxWidth: "400px",
-      maxHeight: "400px",
-      marginBottom:"30px"
-    }
+      maxWidth: '400px',
+      maxHeight: '400px',
+      marginBottom: '30px',
+    };
+
     return (
-      <Modal show={true} onHide={this.props.handleQuickViewModalClose} alt={this.props.product.id}>
+      <Modal
+        show={true}
+        onHide={this.props.handleQuickViewModalClose}
+        alt={this.props.product.id}
+      >
         <Modal.Header closeButton>
-          <h2><center><Modal.Title>{this.props.product.name}</Modal.Title></center></h2>
+          <h2>
+            <center>
+              <Modal.Title>{this.props.product.name}</Modal.Title>
+            </center>
+          </h2>
         </Modal.Header>
         <Modal.Body>
           <center>
-            <img src={this.props.product.image} style={imageSizing}/>
+            <img
+              src={this.props.product.image}
+              style={imageSizing}
+              alt={this.props.product.name}
+            />
             <div className="container-fluid">
               <Table responsive>
-                <thead>
-                </thead>
+                <thead></thead>
                 <tbody>
                   <tr>
                     <td>Название:</td>
@@ -33,7 +47,9 @@ class QuickView extends Component{
                   </tr>
                   <tr>
                     <td>Цена:</td>
-                    <td>{this.props.product.price}</td>
+                    <td className="currency">
+                      {formatPrice(this.props.product.price)}
+                    </td>
                   </tr>
                 </tbody>
               </Table>
@@ -41,12 +57,13 @@ class QuickView extends Component{
           </center>
         </Modal.Body>
         <Modal.Footer>
-          <Button onClick={this.props.handleQuickViewModalClose}>Close</Button>
+          <Button onClick={this.props.handleQuickViewModalClose}>
+            Закрыть
+          </Button>
         </Modal.Footer>
       </Modal>
     );
   }
 }
-
 
 export default QuickView;

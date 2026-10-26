@@ -39,8 +39,7 @@
 - интеграция с Rollbar (middleware включается только при заданном токене);
 - управление зависимостями через `uv` (lock-файл в репозитории);
 - pre-commit: `ruff`, `djlint`, `mypy` + `django-stubs`;
-- тесты на `pytest-django`: оформление заказа, подбор ресторана, статусы,
-  доступ к доске менеджера и кэш геокодера;
+- тесты на `pytest-django` (backend) и `vitest` (корзина и форматирование цен);
 - GitHub Actions: линтеры, тесты, `manage.py check` с `DEBUG=True/False`,
   проверка неприменённых миграций;
 - прод-периметр: HTTPS-редирект, HSTS, secure-cookies, throttling и `/healthz/`;
@@ -67,10 +66,10 @@
 | --- | --- |
 | Backend | Python 3.12+, Django 5.2, Django REST Framework, `phonenumber_field` |
 | БД | PostgreSQL 16 (в dev можно SQLite) |
-| Frontend | React 17, Bootstrap 3, Parcel 2 |
+| Frontend | React 17, Bootstrap 3, Parcel 2, Vitest |
 | Геоданные | Яндекс.Геокодер + `geopy` |
 | Мониторинг | Rollbar |
-| Качество | `ruff`, `djlint`, `mypy`, `pre-commit`, `pytest-django`, GitHub Actions |
+| Качество | `ruff`, `djlint`, `mypy`, `pre-commit`, `pytest-django`, `vitest`, GitHub Actions |
 | Прод | gunicorn, nginx, systemd, certbot |
 
 ## Как устроено
@@ -122,7 +121,7 @@ docs/screenshots/   скриншоты для README
 
 ## Быстрый старт
 
-Нужны Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 20+ и Docker
+Нужны Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 22+ и Docker
 (для PostgreSQL; можно обойтись SQLite).
 
 ```powershell
@@ -151,7 +150,7 @@ uv run python -c "from django.core.management.utils import get_random_secret_key
 ```powershell
 uv run python manage.py migrate
 uv run python manage.py seed_demo --orders 6
-.\node_modules\.bin\parcel build bundles-src/index.js --dist-dir bundles --public-url="./"
+npm run build
 uv run python manage.py runserver
 ```
 
@@ -164,11 +163,15 @@ uv run python manage.py runserver
 товары с настоящими фотографиями команда не трогает; для новых рисует
 картинки-заглушки.
 
-Во время разработки фронта вместо `parcel build` удобнее держать `parcel watch`:
+Во время разработки фронта вместо `npm run build` удобнее держать `npm run watch`:
 
 ```powershell
-.\node_modules\.bin\parcel watch bundles-src/index.js --dist-dir bundles --public-url="./"
+npm run watch
 ```
+
+Фронтенд разложен по слоям: `bundles-src/api.js` — запросы к API и тексты
+ошибок, `bundles-src/cart.js` — чистые функции корзины (без React),
+`bundles-src/format.js` — форматирование цен, `App.js` — состояние и разметка.
 
 ## Переменные окружения
 
@@ -181,6 +184,7 @@ uv run python manage.py runserver
 | `YANDEX_GEOCODER_API_KEY` | нет | ключ Геокодера; без него не считаются расстояния |
 | `ROLLBAR_TOKEN` | нет | включает отправку ошибок в Rollbar |
 | `ROLLBAR_ENVIRONMENT` | нет | окружение в Rollbar |
+| `SECURE_SSL_REDIRECT` | нет | `True` на проде: HTTPS-редирект, secure-cookies, HSTS |
 | `DEMO_MANAGER_PASSWORD` | нет | пароль демо-менеджера для `seed_demo` |
 
 Полный список с комментариями — в [.env.example](.env.example).
@@ -194,19 +198,21 @@ uv run python manage.py runserver
 | `uv run python manage.py seed_demo --orders 6` | демо-данные и демо-менеджер |
 | `uv run python manage.py check --deploy` | аудит прод-настроек безопасности |
 | `uv run pre-commit run --all-files` | линтеры, формат и типы |
-| `uv run pytest` | тесты (pytest-django) |
-| `.\node_modules\.bin\parcel build bundles-src/index.js --dist-dir bundles --public-url="./"` | сборка фронта |
+| `uv run pytest` | тесты бэкенда (pytest-django) |
+| `npm test` | тесты фронтенда (vitest) |
+| `npm run build` | сборка фронта в `bundles/` |
 
 ## Качество кода
 
 - `ruff` — линт и формат Python (длина строки 79);
 - `djlint` — форматирование Django-шаблонов;
 - `mypy` + `django-stubs` — проверка типов;
-- `pytest-django` — тесты;
+- `pytest-django` — тесты бэкенда, `vitest` — тесты фронтенда;
 - CI прогоняет всё это на каждый push и pull request, плюс `manage.py check`
-  с `DEBUG=True` и `DEBUG=False` и `makemigrations --check`.
+  с `DEBUG=True` и `DEBUG=False`, `makemigrations --check`, `npm test` и
+  `npm run build`.
 
-Тесты (`tests/`, 49 штук) проверяют то, что раньше держалось на честном слове:
+Тесты (`tests/`, 52 штуки) проверяют то, что раньше держалось на честном слове:
 
 - `test_order_placement.py` — снимок цены, схлопывание повторяющихся позиций,
   отказ для недоступного товара и отсутствие «полузаказа» при ошибке;
@@ -217,7 +223,12 @@ uv run python manage.py runserver
 - `test_manager_access.py` — доступ к доске менеджера только для staff и
   сборка таблицы из данных заказа;
 - `test_geocoder.py` — кэш `Place`, разбор ответа Яндекса и молчаливый отказ
-  без падения страницы.
+  без падения страницы;
+- `test_healthz.py` — `/healthz/` отвечает 200 при живой базе и 503 без неё.
+
+Фронтенд-тесты лежат рядом с кодом (`bundles-src/cart.test.js`) и проверяют
+чистые функции корзины: сложение количеств, удаление по id (регрессия на
+`splice(-1)`), подсчёт штук и суммы, формат цены.
 
 `pytest-django` создаёт отдельную тестовую базу. Если локальный PostgreSQL не
 запущен, тесты можно прогнать на SQLite:
@@ -226,8 +237,9 @@ uv run python manage.py runserver
 $env:DATABASE_URL="sqlite:///C:/code/star-burger/db.sqlite3"; uv run pytest
 ```
 
-Что дальше: фронтенд (`App.js` разбить на api-клиент и корзину, добавить
-vitest) и уведомления клиенту о смене статуса заказа.
+Что дальше: уведомления клиенту о смене статуса заказа, общий лимит заказов
+через Redis (сейчас счётчик у каждого воркера свой) и TTL/негативный кэш
+геокодера.
 
 ## Деплой
 

@@ -34,3 +34,15 @@
   background-repeat: no-repeat;
   background-position: center;
 }
+
+.status-banner {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1070;
+  width: calc(100% - 32px);
+  max-width: 640px;
+  margin: 0;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+}

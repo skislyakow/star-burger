@@ -136,7 +136,17 @@ uv run pytest
 - `test_fulfillment.py` — подбор ресторана по пересечению меню, расстояния и сортировка;
 - `test_status_transitions.py` — `Order.transition_to()` и авто-статус «Собран» в админке;
 - `test_manager_access.py` — доска менеджера только для staff, логин, сборка таблицы;
-- `test_geocoder.py` — кэш `Place`, разбор ответа Яндекса, молчаливый отказ.
+- `test_geocoder.py` — кэш `Place`, разбор ответа Яндекса, молчаливый отказ;
+- `test_healthz.py` — `/healthz/`: 200 при живой базе, 503 при недоступной.
+
+Фронтенд-тесты (`vitest`) лежат рядом с кодом — `bundles-src/cart.test.js`:
+
+```powershell
+npm test            # разовый прогон
+npm run test:watch  # в фоне во время разработки
+```
+
+Логика витрины разложена по слоям: `bundles-src/api.js` (fetch, CSRF, тексты ошибок), `bundles-src/cart.js` (чистые функции корзины — без React, поэтому тестируются без DOM), `bundles-src/format.js` (цены), `App.js` (состояние и разметка).
 
 Доменные правила вынесены из вьюх и админки: `foodcartapp/orders.py` (`place_order` — валидация позиций и снимок цены), `foodcartapp/fulfillment.py` (`FulfillmentService` — кто может приготовить заказ и как далеко везти), `Order.transition_to()` (`foodcartapp/models.py` — статусы и даты `called_at`/`delivered_at`). Сериализатор, доска менеджера и `OrderAdmin` только делегируют им.
 
@@ -164,15 +174,15 @@ uv run pre-commit run --all-files   # разовый прогон по всем�
 - `pre-commit run --all-files` смотрит только на *отслеживаемые* git файлы — новые, ещё не добавленные в индекс, он не проверяет;
 - на сервере хуки не нужны: там `uv sync --no-dev`, а `.git/hooks` в `/opt/star-burger` не устанавливаются.
 
-Тот же набор проверок крутится в GitHub Actions — `.github/workflows/ci.yml`, workflow `CI`. Триггеры: push в `main`, любой pull request, ручной запуск (`workflow_dispatch`). Шаги: `actions/checkout@v7` → `astral-sh/setup-uv@v7` (Python 3.12, как на сервере) → `uv sync --frozen` → кэш `~/.cache/pre-commit` по хэшу `.pre-commit-config.yaml` → `pre-commit run --all-files --show-diff-on-failure` → `manage.py check` с `DEBUG=False` и с `DEBUG=True` → `makemigrations --check --dry-run` (ловит забытые миграции) → `uv run pytest`.
+Тот же набор проверок крутится в GitHub Actions — `.github/workflows/ci.yml`, workflow `CI`. Триггеры: push в `main`, любой pull request, ручной запуск (`workflow_dispatch`). Два job'а: `checks` — `actions/checkout@v7` → `astral-sh/setup-uv@v7` (Python 3.12, как на сервере) → `uv sync --frozen` → кэш `~/.cache/pre-commit` по хэшу `.pre-commit-config.yaml` → `pre-commit run --all-files --show-diff-on-failure` → `manage.py check` с `DEBUG=False` и с `DEBUG=True` → `makemigrations --check --dry-run` (ловит забытые миграции) → `uv run pytest`; `frontend` — `actions/setup-node@v7` (Node 22, кэш npm) → `npm ci` → `npm test` → `npm run build`.
 
 Грабли: в CI нет `.env`, а `settings.py` читает `SECRET_KEY` уже при импорте (его же импортирует mypy через django-stubs), поэтому в job задан `env.SECRET_KEY`. Остальные переменные не нужны: без `DATABASE_URL` Django работает на локальном SQLite. `uv sync --frozen` заодно роняет сборку, если `uv.lock` разошёлся с `pyproject.toml`. Проверить workflow локально: `uvx --from actionlint-py actionlint .github/workflows/ci.yml`.
 
 ### 6. Запуск dev-версии
 
 ```powershell
-uv run python manage.py runserver          # терминал 1
-.\node_modules\.bin\parcel watch bundles-src/index.js --dist-dir bundles --public-url="./"   # терминал 2 (если меняешь фронт)
+uv run python manage.py runserver   # терминал 1
+npm run watch                       # терминал 2 (если меняешь фронт)
 ```
 
 ---
@@ -181,8 +191,10 @@ uv run python manage.py runserver          # терминал 1
 
 ```sh
 npm ci
-./node_modules/.bin/parcel build bundles-src/index.js --dist-dir bundles --public-url="./"
+npm run build
 ```
+
+Скрипты (`package.json`): `npm run build` — прод-сборка в `bundles/`, `npm run watch` — то же в watch-режиме, `npm test` — юнит-тесты `vitest`, `npm run test:watch` — они же в watch-режиме.
 
 Каталог `bundles/` в git не входит — собирать на каждой машине. Результат нужен `collectstatic`.
 

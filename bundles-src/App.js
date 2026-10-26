@@ -9,294 +9,269 @@ import QuickView from './components/QuickView';
 import FooterComponent from './components/FooterComponent';
 import CheckoutModal from './components/CheckoutModalComponent';
 import LoadingProducts from './components/loaders/LoadingProducts';
-import NoResults from "./components/NoResults";
+import NoResults from './components/NoResults';
+import StatusBanner from './components/StatusBanner';
+
+import { getBanners, getProducts, submitOrder } from './api';
+import {
+  addToCart,
+  cartCount,
+  cartTotal,
+  removeFromCart,
+  toOrderLines,
+} from './cart';
 
 import './css/App.css';
 
+const STATUS_TIMEOUT = 8000;
+
 class App extends Component {
+  state = {
+    banners: null, // null — баннеры ещё грузятся
+    products: null, // null — меню ещё грузится
+    productsError: false,
+    term: '',
+    cart: [],
+    quickViewProduct: null,
+    showCart: false,
+    checkoutModalActive: false,
+    checkoutError: null,
+    status: null,
+  };
 
-  constructor(props){
-    super();
-    this.state = {
-      banners: [],  // null represent "Loading" state, will be replaced by Array on server response
-      products: null,  // null represent "Loading" state, will be replaced by Array on server response
-      term: '',
-      cart: [],
-      quickViewProduct: null,  // will be replaced by selected product attributes
-      showCart: false,
-      checkoutModalActive: false,
-    };
-    this.handleSearch = this.handleSearch.bind(this);
-    this.handleAddToCart = this.handleAddToCart.bind(this);
-    this.checkProduct = this.checkProduct.bind(this);
-    this.handleRemoveProduct = this.handleRemoveProduct.bind(this);
-    this.handleCartShow = this.handleCartShow.bind(this);
-    this.handleCartClose = this.handleCartClose.bind(this);
-    this.handleQuickViewModalClose = this.handleQuickViewModalClose.bind(this);
-    this.handleQuickViewModalShow = this.handleQuickViewModalShow.bind(this);
-    this.handleCheckout=this.handleCheckout.bind(this);
-    this.handleCheckoutModalShow=this.handleCheckoutModalShow.bind(this);
-    this.handleCheckoutModalClose=this.handleCheckoutModalClose.bind(this);
+  componentDidMount() {
+    this.loadProducts();
+    this.loadBanners();
   }
 
-  handleCheckoutModalShow(){
-    this.setState({checkoutModalActive: true});
+  componentWillUnmount() {
+    clearTimeout(this.statusTimer);
   }
 
-  handleCheckoutModalClose(){
-    this.setState({checkoutModalActive: false});
-  }
-
-  async handleCheckout({firstname, lastname, phonenumber, address}){
-    const url = "api/order/";
-    let data = {
-      'products': this.state.cart.map(item=>({
-        product: item.id,
-        quantity: item.quantity,
-      })),
-      firstname,
-      lastname,
-      phonenumber,
-      address
-    };
-
-    let csrfToken = document.querySelector("[name=csrfmiddlewaretoken]").value;
+  loadProducts = async () => {
+    this.setState({ products: null, productsError: false });
 
     try {
-      let response = await fetch(url, {
-        method: 'post',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRFToken': csrfToken,
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok){
-        alert('Ошибка при оформлении заказа. Попробуйте ещё раз или свяжитесь с нами по телефону.');
-        return;
-      }
-      let responseData = await response.json();
-
-      this.setState({
-        cart: [],
-      });
-
-      alert("Заказ оформлен. Вам перезвонят в течение 10 минут.");
-
-      this.handleCartClose();
-    } catch(error){
-      alert('Ошибка при оформлении заказа. Попробуйте ещё раз или свяжитесь с нами по телефону.');
-      throw error;
-    };
-  }
-
-
-  updateToken(NewToken){
-
-    this.setState({
-      token:NewToken
-    })
-  }
-
-
-  async getProducts(){
-    let response = await fetch('/api/products/', {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      }
-    });
-
-    if (!response.ok){
-      return;
+      const products = await getProducts();
+      this.setState({ products });
+    } catch (error) {
+      this.setState({ productsError: true });
+      this.showStatus('danger', error.message);
     }
+  };
 
-    let data = await response.json();
-    this.setState({
-      products : data
-    });
-  }
-
-  async getBanners(){
-    let response = await fetch('/api/banners/', {
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      }
-    });
-
-    if (!response.ok){
-      return;
+  loadBanners = async () => {
+    try {
+      const banners = await getBanners();
+      this.setState({ banners });
+    } catch (error) {
+      // Без баннеров витрина работает — молча оставляем карусель пустой.
+      this.setState({ banners: [] });
     }
+  };
 
-    let data = await response.json();
-    this.setState({
-      banners : data
-    });
-  }
+  showStatus = (kind, text) => {
+    clearTimeout(this.statusTimer);
+    this.setState({ status: { kind, text } });
+    this.statusTimer = setTimeout(
+      () => this.setState({ status: null }),
+      STATUS_TIMEOUT,
+    );
+  };
 
-  componentDidMount(){
-    this.getProducts();
-    this.getBanners();
-  }
+  handleSearch = (event) => {
+    this.setState({ term: event.target.value });
+  };
 
+  handleAddToCart = (product) => {
+    this.setState(({ cart }) => ({ cart: addToCart(cart, product) }));
+  };
 
-  // Search by Keyword
-  handleSearch(event){
-    this.setState({term: event.target.value});
-  }
+  handleRemoveProduct = (productId, event) => {
+    if (event) {
+      event.preventDefault();
+    }
+    this.setState(({ cart }) => ({ cart: removeFromCart(cart, productId) }));
+  };
 
-  handleCartClose() {
-    this.setState({ showCart: false });
-  }
-
-  handleCartShow() {
+  handleCartShow = () => {
     this.setState({ showCart: true });
-  }
+  };
 
-  // Add to Cart
-  handleAddToCart(selectedProducts){
+  handleCartClose = () => {
+    this.setState({ showCart: false });
+  };
 
-    let cartItems = this.state.cart;
-    let productID = selectedProducts.id;
-    let productQty = selectedProducts.quantity;
+  handleQuickViewModalShow = (product) => {
+    this.setState({ quickViewProduct: product });
+  };
 
-    if (this.checkProduct(productID)){
-      let index = cartItems.findIndex((x => x.id == productID));
-      cartItems[index].quantity = parseFloat(cartItems[index].quantity) + parseFloat(productQty);
-      this.setState({
-        cart: cartItems
-      })
+  handleQuickViewModalClose = () => {
+    this.setState({ quickViewProduct: null });
+  };
+
+  handleCheckoutModalShow = () => {
+    this.setState({ checkoutModalActive: true, checkoutError: null });
+  };
+
+  handleCheckoutModalClose = () => {
+    this.setState({ checkoutModalActive: false });
+  };
+
+  handleCheckout = async ({ firstname, lastname, phonenumber, address }) => {
+    try {
+      await submitOrder({
+        firstname: firstname.trim(),
+        lastname: lastname.trim(),
+        phonenumber: phonenumber.trim(),
+        address: address.trim(),
+        products: toOrderLines(this.state.cart),
+      });
+    } catch (error) {
+      this.setState({ checkoutError: error.message });
+      return false;
     }
-    else {
-      cartItems.push(selectedProducts);
-    }
 
     this.setState({
-      cart : cartItems,
+      cart: [],
+      showCart: false,
+      checkoutModalActive: false,
+      checkoutError: null,
     });
-  }
+    this.showStatus(
+      'success',
+      'Заказ оформлен. Вам перезвонят в течение 10 минут.',
+    );
+    return true;
+  };
 
+  renderMenuSection(key, title, productList) {
+    return (
+      <div style={{ marginTop: '50px' }} className="form-group" key={key}>
+        <center>
+          <h2>{title}</h2>
+          <hr />
+        </center>
 
-  handleRemoveProduct(id, e){
-    let cart = this.state.cart;
-    let index = cart.findIndex((x => x.id == id));
-    cart.splice(index, 1);
-    this.setState({
-      cart: cart
-    })
-    e.preventDefault();
-  }
-
-
-  checkProduct(productID){
-    let cart = this.state.cart;
-    return cart.some(function(item) {
-      return item.id === productID;
-    });
-  }
-
-  handleQuickViewModalShow(product){
-    this.setState({
-      quickViewProduct: product,
-    })
-  }
-
-  handleQuickViewModalClose(){
-    this.setState({
-      quickViewProduct: null,
-    })
+        <Products
+          productsList={productList}
+          addToCart={this.handleAddToCart}
+          openModal={this.handleQuickViewModalShow}
+        />
+      </div>
+    );
   }
 
   render() {
+    const {
+      banners,
+      products,
+      productsError,
+      term,
+      cart,
+      quickViewProduct,
+      showCart,
+      checkoutModalActive,
+      checkoutError,
+      status,
+    } = this.state;
 
-    const totalAmount = this.state.cart.map(item => item.price * item.quantity).reduce((a,b) => a + b, 0);
+    const normalizedTerm = _.lowerCase(_.trim(term));
+    const totalItems = cartCount(cart);
+    const totalAmount = cartTotal(cart);
+    const menuBlocks = [];
 
-    let menuBlocks = [];
-    let normalizedTerm = _.lowerCase(_.trim(this.state.term));
+    if (products) {
+      let filteredProducts = products;
 
-    if (this.state.products){
-      let filteredProducts = this.state.products;
-
-      if (normalizedTerm){
-        filteredProducts = this.state.products.filter(product => !normalizedTerm || product.name.toLowerCase().includes(normalizedTerm));
+      if (normalizedTerm) {
+        filteredProducts = products.filter((product) =>
+          product.name.toLowerCase().includes(normalizedTerm),
+        );
       } else {
-        let highlightedProducts = this.state.products.filter(x => x.special_status);
+        const highlightedProducts = products.filter(
+          (product) => product.special_status,
+        );
 
-        if (highlightedProducts.length){
+        if (highlightedProducts.length) {
           menuBlocks.push(
-            <div style={{marginTop:"50px"}} className="form-group" key={'_popular'}>
-              <center>
-                <h2>Популярное</h2>
-                <hr/>
-              </center>
-
-              <Products
-                productsList={highlightedProducts}
-                addToCart={this.handleAddToCart}
-                openModal={this.handleQuickViewModalShow}
-              />
-            </div>
-          )
+            this.renderMenuSection(
+              '_popular',
+              'Популярное',
+              highlightedProducts,
+            ),
+          );
         }
       }
 
-      let menuGroups = _.groupBy(filteredProducts, product => product.category && product.category.name || '');
-      menuBlocks.push(...Object.entries(menuGroups).map( ([groupName, products], index) => (
-        <div style={{marginTop:"50px"}} className="form-group" key={index}>
-          <center>
-            <h2>{ groupName }</h2>
-            <hr/>
-          </center>
+      const menuGroups = _.groupBy(
+        filteredProducts,
+        (product) => (product.category && product.category.name) || 'Другое',
+      );
 
-          <Products
-            productsList={products}
-            addToCart={this.handleAddToCart}
-            openModal={this.handleQuickViewModalShow}
-          />
-        </div>
-      )));
+      Object.entries(menuGroups).forEach(([groupName, groupProducts]) => {
+        menuBlocks.push(
+          this.renderMenuSection(groupName, groupName, groupProducts),
+        );
+      });
     }
 
     return (
-
       <React.Fragment>
         <NavBarComponent
-          totalItems={this.state.cart.length}
+          totalItems={totalItems}
           totalAmount={totalAmount}
           handleCartShow={this.handleCartShow}
         />
 
+        {status && (
+          <StatusBanner
+            kind={status.kind}
+            text={status.text}
+            onClose={() => this.setState({ status: null })}
+          />
+        )}
+
         <CartModalComponent
-          cartItems={this.state.cart}
-          showCart={this.state.showCart}
+          cartItems={cart}
+          showCart={showCart}
           removeProduct={this.handleRemoveProduct}
           handleCartClose={this.handleCartClose}
           handleProceed={this.handleCheckoutModalShow}
         />
 
-        { this.state.quickViewProduct &&
+        {quickViewProduct && (
           <QuickView
-            product={this.state.quickViewProduct}
+            product={quickViewProduct}
             handleQuickViewModalClose={this.handleQuickViewModalClose}
           />
-        }
+        )}
 
-        { this.state.banners &&
-          <BannerComponent banners={this.state.banners}/>
-        }
+        {banners && banners.length > 0 && (
+          <BannerComponent banners={banners} />
+        )}
 
         <a id="menu" href="#"></a>
 
         <div className="container-fluid">
-          <div className="row" style={{marginBottom:"50px"}}>
+          <div className="row" style={{ marginBottom: '50px' }}>
             <div className="col-md-3  col-lg-3"></div>
-            <div className="col-md-6 col-sm-12 col-lg-6 mt-5" style={{marginTop: '50px'}}>
+            <div
+              className="col-md-6 col-sm-12 col-lg-6 mt-5"
+              style={{ marginTop: '50px' }}
+            >
               <div className="input-group">
-                <input type="text" onChange={this.handleSearch} className="form-control"/>
-                <span className="input-group-addon" style={{marginTop:"40px"}}>
+                <input
+                  type="text"
+                  onChange={this.handleSearch}
+                  className="form-control"
+                  aria-label="Поиск по меню"
+                  placeholder="Найти блюдо"
+                />
+                <span
+                  className="input-group-addon"
+                  style={{ marginTop: '40px' }}
+                >
                   <span className="glyphicon glyphicon-search"></span>
                 </span>
               </div>
@@ -304,21 +279,35 @@ class App extends Component {
             <div className="col-md-3 col-lg-3"></div>
           </div>
 
-          { !this.state.products && (
+          {!products && !productsError && (
             <div>
               <center>
                 <h2>Меню Star Burger</h2>
-                <hr/>
+                <hr />
               </center>
               <LoadingProducts />
             </div>
           )}
 
-          { this.state.products && normalizedTerm && !menuBlocks.length && (
-            <NoResults />
+          {productsError && (
+            <div className="row">
+              <div className="col-md-6 col-md-offset-3 text-center">
+                <h2>Не удалось загрузить меню</h2>
+                <p>Проверьте соединение и попробуйте ещё раз.</p>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={this.loadProducts}
+                >
+                  Обновить
+                </button>
+              </div>
+            </div>
           )}
 
-          { this.state.products && !normalizedTerm && !menuBlocks.length && (
+          {products && normalizedTerm && !menuBlocks.length && <NoResults />}
+
+          {products && !normalizedTerm && !menuBlocks.length && (
             <div className="row">
               <div className="col-6">
                 <center>
@@ -328,26 +317,22 @@ class App extends Component {
             </div>
           )}
 
-          { menuBlocks }
+          {menuBlocks}
 
-          <br/>
-          <br/>
-          <br/>
-
-
+          <br />
+          <br />
+          <br />
         </div>
 
         <a href="#" id="contact_us"></a>
-        <FooterComponent/>
+        <FooterComponent />
 
         <CheckoutModal
-          checkoutModalActive={true}
-          checkoutModalActive={this.state.checkoutModalActive}
-          handleCheckoutModalShow={this.handleCheckoutModalShow}
+          checkoutModalActive={checkoutModalActive}
+          error={checkoutError}
           handleCheckoutModalClose={this.handleCheckoutModalClose}
           handleCheckout={this.handleCheckout}
         />
-
       </React.Fragment>
     );
   }
