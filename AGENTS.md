@@ -6,9 +6,9 @@
 
 - **Backend**: Django 5.2, Python (dev: 3.13 Windows, prod: 3.12 Ubuntu), зависимости через `uv` (`pyproject.toml` + `uv.lock`)
 - **БД**: PostgreSQL 16 (переехали со SQLite командами `dumpdata`/`loaddata`)
-- **Фронтенд**: Node.js + Parcel 2 (`npm ci`, сборка в `bundles/`)
+- **Фронтенд**: Node.js 22+ (на сервере 22.23.4, локально 24, в CI 22) + Parcel 2 (`npm ci`, сборка в `bundles/`)
 - **Мониторинг**: Rollbar (middleware подключается автоматически, если задан `ROLLBAR_TOKEN`)
-- **Качество кода**: `ruff` (линт + формат), `djlint` (шаблоны), `mypy` + `django-stubs`, `pytest` + `pytest-django` — линтеры прогоняются через `pre-commit`
+- **Качество кода**: `ruff` (линт + формат), `djlint` (шаблоны), `mypy` + `django-stubs`, `pytest` + `pytest-django`, `vitest` — линтеры прогоняются через `pre-commit`
 - **Прод**: nginx (80/443) → gunicorn `127.0.0.1:8002` под systemd
 
 ---
@@ -195,6 +195,16 @@ npm run build
 ```
 
 Скрипты (`package.json`): `npm run build` — прод-сборка в `bundles/`, `npm run watch` — то же в watch-режиме, `npm test` — юнит-тесты `vitest`, `npm run test:watch` — они же в watch-режиме.
+
+`vitest` 5 требует Node `^22.12` — на сервере 26.10.2026 Node обновлён с 18.19.1 (apt-пакет Ubuntu 24.04) до 22.23.4 через NodeSource:
+
+```sh
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt-get install -y nodejs
+node -v   # v22.23.4, npm 10.9.9
+```
+
+До обновления `npm ci` в деплое сыпал `EBADENGINE` на `vitest`/`vite` (сборке это не мешало, тесты на сервере не гоняются). Node на сервере нужен только для `parcel build` — другие сайты на VDS питоновские.
 
 Каталог `bundles/` в git не входит — собирать на каждой машине. Результат нужен `collectstatic`.
 
