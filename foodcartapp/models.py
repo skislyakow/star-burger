@@ -1,8 +1,8 @@
-from django.db import models
-from phonenumber_field.modelfields import PhoneNumberField
 from django.core.validators import MinValueValidator
-from django.db.models import F, Sum, Value, DecimalField
+from django.db import models
+from django.db.models import DecimalField, F, Sum, Value
 from django.db.models.functions import Coalesce
+from phonenumber_field.modelfields import PhoneNumberField
 
 
 class Restaurant(models.Model):
@@ -166,7 +166,7 @@ class Order(models.Model):
         ELECTRONIC = "electronic", "Электронно"
         CASH = "cash", "Наличными"
 
-    payment_method = models.CharField(
+    payment_method = models.CharField(  # noqa: DJ001 — NULL значит «не указан»
         "способ оплаты",
         max_length=30,
         choices=PaymentMethod.choices,

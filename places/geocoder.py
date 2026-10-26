@@ -42,7 +42,7 @@ def _fetch_coordinates_safe(address) -> tuple[float, float] | None:
 def get_coordinates_map(addresses) -> dict[str, tuple[float, float] | None]:
     addresses = set(addresses)
     coordinates_by_address: dict[str, tuple[float, float] | None] = {
-        address: (lat, lon)
+        address: (lat, lon) if lat is not None and lon is not None else None
         for address, lat, lon in Place.objects.filter(
             address__in=addresses
         ).values_list("address", "lat", "lon")

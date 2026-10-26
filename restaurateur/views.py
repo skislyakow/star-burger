@@ -1,15 +1,15 @@
 from django import forms
-from django.shortcuts import redirect, render
-from django.views import View
-from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth import authenticate, login
 from django.contrib.auth import views as auth_views
+from django.contrib.auth.decorators import user_passes_test
 from django.contrib.auth.models import User
-from django.db.models import Case, When, Value, IntegerField
+from django.db.models import Case, IntegerField, Value, When
+from django.shortcuts import redirect, render
+from django.views import View
 from geopy.distance import distance
 
-from places.geocoder import get_coordinates_map
 from foodcartapp.models import Order, Product, Restaurant, RestaurantMenuItem
+from places.geocoder import get_coordinates_map
 
 
 class Login(forms.Form):
@@ -141,7 +141,7 @@ def load_restaurants_for_product() -> dict[int, set[int]]:
     menu_items = RestaurantMenuItem.objects.filter(
         availability=True
     ).values_list("product_id", "restaurant_id")
-    result = {}
+    result: dict[int, set[int]] = {}
     for product_id, restaurant_id in menu_items:
         result.setdefault(product_id, set()).add(restaurant_id)
     return result

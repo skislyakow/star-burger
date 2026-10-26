@@ -1,66 +1,63 @@
-{% extends 'base_restaurateur_page.html' %}
-
+{% extends "base_restaurateur_page.html" %}
 {% block title %}Необработанные заказы | Star Burger{% endblock %}
-
 {% block content %}
   <center>
     <h2>Необработанные заказы</h2>
   </center>
-
-  <hr/>
-  <br/>
-  <br/>
+  <hr />
+  <br />
+  <br />
   <div class="container">
-   <table class="table table-responsive">
-    <tr>
-      <th>ID заказа</th>
-      <th>Статус</th>
-      <th>Клиент</th>
-      <th>Телефон</th>
-      <th>Адрес доставки</th>
-      <th>Стоимость заказа</th>
-      <th>Способ оплаты</th>
-      <th>Комментарий</th>
-      <th>Ресторан</th>      
-      <th>Редактировать</th>
-    </tr>
-
-    {% for item, restaurants, address_ok in order_items %}
+    <table class="table table-responsive">
       <tr>
-        <td>{{ item.id }}</td>
-        <td>{{ item.get_status_display }}</td>
-        <td>{{ item.firstname }} {{ item.lastname }}</td>
-        <td>{{ item.phonenumber }}</td>
-        <td>{{ item.address }}</td>
-        <td>{{ item.total_cost }}</td>
-        <td>
-          {% if item.payment_method %}
-            {{ item.get_payment_method_display}}
-          {% else %}
-            <em class="text-danger">Не указан</em>
-          {% endif %}
-        </td>
-        <td>{{ item.comment }}</td>
-        <td>
-          {% if item.restaurant %}
-            Готовит: {{ item.restaurant.name }}
-          {% else %}
-            {% if not address_ok %}
-              <em class="text-danger">Адрес не определился.</em><br/>
-            {% endif %}
-            {% if restaurants %}
-              Могут приготовить:
-              {% for restaurant, distance in restaurants %}
-                {{ restaurant }}{% if distance %} - {{ distance|floatformat:'1' }} км{% endif %}<br/>
-              {% endfor %}
-            {% else %}
-              <em class="text-danger">Ни один ресторан не может приготовить заказ.</em>
-            {% endif %}
-          {% endif %}
-        </td>
-        <td><a href="{% url "admin:foodcartapp_order_change" object_id=item.id %}?next={{ request.path|urlencode }}">Редактировать</a></td>
+        <th>ID заказа</th>
+        <th>Статус</th>
+        <th>Клиент</th>
+        <th>Телефон</th>
+        <th>Адрес доставки</th>
+        <th>Стоимость заказа</th>
+        <th>Способ оплаты</th>
+        <th>Комментарий</th>
+        <th>Ресторан</th>
+        <th>Редактировать</th>
       </tr>
-    {% endfor %}
-   </table>
+      {% for item, restaurants, address_ok in order_items %}
+        <tr>
+          <td>{{ item.id }}</td>
+          <td>{{ item.get_status_display }}</td>
+          <td>{{ item.firstname }} {{ item.lastname }}</td>
+          <td>{{ item.phonenumber }}</td>
+          <td>{{ item.address }}</td>
+          <td>{{ item.total_cost }}</td>
+          <td>
+            {% if item.payment_method %}
+              {{ item.get_payment_method_display }}
+            {% else %}
+              <em class="text-danger">Не указан</em>
+            {% endif %}
+          </td>
+          <td>{{ item.comment }}</td>
+          <td>
+            {% if item.restaurant %}
+              Готовит: {{ item.restaurant.name }}
+            {% else %}
+              {% if not address_ok %}
+                <em class="text-danger">Адрес не определился.</em>
+                <br />
+              {% endif %}
+              {% if restaurants %}
+                Могут приготовить:
+                {% for restaurant, distance in restaurants %}
+                  {{ restaurant }}{% if distance %} - {{ distance|floatformat:'1' }} км{% endif %}<br />
+                {% endfor %}
+              {% else %}
+                <em class="text-danger">Ни один ресторан не может приготовить заказ.</em>
+              {% endif %}
+            {% endif %}
+          </td>
+          <td><a href="{% url "admin:foodcartapp_order_change" object_id=item.id %}?next={{ request.path|urlencode }}">Редактировать</a></td>
+        </tr>
+      {% endfor %}
+    </table>
   </div>
 {% endblock %}

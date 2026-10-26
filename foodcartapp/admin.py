@@ -1,15 +1,18 @@
 from django.contrib import admin
-from django.urls import reverse
+from django.shortcuts import redirect
 from django.templatetags.static import static
+from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.shortcuts import redirect
 
-from .models import Product
-from .models import ProductCategory
-from .models import Restaurant
-from .models import RestaurantMenuItem
-from .models import Order, OrderItem
+from .models import (
+    Order,
+    OrderItem,
+    Product,
+    ProductCategory,
+    Restaurant,
+    RestaurantMenuItem,
+)
 
 
 class RestaurantMenuItemInline(admin.TabularInline):
@@ -86,6 +89,7 @@ class ProductAdmin(admin.ModelAdmin):
     class Media:
         css = {"all": (static("admin/foodcartapp.css"))}
 
+    @admin.display(description="превью")
     def get_image_preview(self, obj):
         if not obj.image:
             return "выберите картинку"
@@ -93,8 +97,7 @@ class ProductAdmin(admin.ModelAdmin):
             '<img src="{url}" style="max-height: 200px;"/>', url=obj.image.url
         )
 
-    get_image_preview.short_description = "превью"
-
+    @admin.display(description="превью")
     def get_image_list_preview(self, obj):
         if not obj.image or not obj.id:
             return "нет картинки"
@@ -104,8 +107,6 @@ class ProductAdmin(admin.ModelAdmin):
             edit_url=edit_url,
             src=obj.image.url,
         )
-
-    get_image_list_preview.short_description = "превью"
 
 
 @admin.register(ProductCategory)
