@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from django.contrib.auth.models import User
+from django.core.cache import cache
 
 from foodcartapp.models import (
     Order,
@@ -16,6 +17,12 @@ from foodcartapp.models import (
 )
 
 Coordinates = tuple[float, float]
+
+
+@pytest.fixture(autouse=True)
+def clear_cache():
+    """Лимиты DRF живут в кэше — не даём им перетекать между тестами."""
+    cache.clear()
 
 
 class FakeGeocoder:

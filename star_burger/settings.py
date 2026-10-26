@@ -15,6 +15,20 @@ DEBUG = env.bool("DEBUG", True)
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", ["127.0.0.1", "localhost"])
 
+# nginx терминирует TLS и передаёт схему в X-Forwarded-Proto. Без этой строки
+# Django считает запрос http и ломает secure-cookies, HSTS и редирект.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Прод-режим безопасности включается одной переменной в /opt/star-burger/.env.
+# По умолчанию выключен: иначе runserver и pytest редиректили бы на https.
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", False)
+SESSION_COOKIE_SECURE = SECURE_SSL_REDIRECT
+CSRF_COOKIE_SECURE = SECURE_SSL_REDIRECT
+SECURE_HSTS_SECONDS = 31536000 if SECURE_SSL_REDIRECT else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_SSL_REDIRECT
+# Заголовок preload безвреден, пока домен не отправлен в hstspreload.org.
+SECURE_HSTS_PRELOAD = SECURE_SSL_REDIRECT
+
 INSTALLED_APPS = [
     "places.apps.PlacesConfig",
     "rest_framework",
@@ -130,8 +144,15 @@ STATICFILES_DIRS = [
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
-        "rest_framework.renderers.BrowsableAPIRenderer",
-    ]
+        # Browsable API — удобная песочница для разработки, но на проде она
+        # показывает формы и тянет шаблоны DRF. Оставляем только в DEBUG.
+        *(["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        # Публичное оформление заказа: ограничение по IP. Кэш — LocMem,
+        # поэтому на проде лимит действует на каждый воркер gunicorn.
+        "order": "30/hour",
+    },
 }
 
 YANDEX_GEOCODER_API_KEY = env("YANDEX_GEOCODER_API_KEY", "")

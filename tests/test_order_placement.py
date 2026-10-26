@@ -4,6 +4,7 @@ from decimal import Decimal
 
 import pytest
 from rest_framework.test import APIClient
+from rest_framework.throttling import ScopedRateThrottle
 
 from foodcartapp.models import Order, OrderItem
 
@@ -212,3 +213,25 @@ def test_total_cost_counts_quantity_and_price(
     )
 
     assert total == Decimal("497.50")
+
+
+def test_order_endpoint_is_throttled(
+    client, product_factory, restaurant_factory, monkeypatch
+):
+    monkeypatch.setattr(
+        ScopedRateThrottle,
+        "THROTTLE_RATES",
+        {"order": "3/min"},
+    )
+    restaurant = restaurant_factory()
+    burger = product_factory(available_in=(restaurant,))
+    body = payload([{"product": burger.id, "quantity": 1}])
+
+    statuses = [
+        client.post(ORDER_URL, body, format="json").status_code
+        for _ in range(3)
+    ]
+    response = client.post(ORDER_URL, body, format="json")
+
+    assert statuses == [201, 201, 201]
+    assert response.status_code == 429

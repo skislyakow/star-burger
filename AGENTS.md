@@ -385,6 +385,7 @@ DEBUG=False
 ALLOWED_HOSTS=star-burger.kislyakov.pro,127.0.0.1,localhost
 DATABASE_URL=postgres://starburger:<пароль>@127.0.0.1:5432/starburger
 ROLLBAR_ENVIRONMENT=production
+SECURE_SSL_REDIRECT=True
 ```
 
 Перенос данных на сервере (данные брать из **серверного** sqlite — там живые заказы):
@@ -400,6 +401,35 @@ mv db.sqlite3 db.sqlite3.backup                             # сайт обяз�
 systemctl start star-burger
 ```
 
+### 4.1. Прод-безопасность и healthz
+
+`settings.py` включает HTTPS-режим одной переменной: `SECURE_SSL_REDIRECT=True` в `/opt/star-burger/.env` даёт редирект http→https, `SESSION_COOKIE_SECURE`/`CSRF_COOKIE_SECURE` и HSTS на год (includeSubDomains + preload-заголовок; в hstspreload.org домен не отправлялся). Локально и в тестах переменная не задана, иначе `runserver` и `pytest` уводили бы на https.
+
+`SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")` обязателен: nginx уже отдаёт этот заголовок, без него Django считает запрос http и редирект зацикливается.
+
+Ротация `SECRET_KEY` (слабый ключ ловится `manage.py check --deploy` как W009):
+
+```sh
+cd /opt/star-burger
+cp .env .env.bak.$(date +%F)
+NEW_KEY=$(.venv/bin/python -c "import secrets; print(secrets.token_urlsafe(64))")
+sed -i "s|^SECRET_KEY=.*|SECRET_KEY=$NEW_KEY|" .env
+systemctl restart star-burger
+```
+
+После ротации все сессии (включая демо-логин) сбрасываются — это нормально: `SECRET_KEY` подписывает cookie сессий и CSRF. Старые `.env.bak.*` не коммитить и не оставлять надолго.
+
+`/healthz/` — публичный JSON: `{"status": "ok"}` и 200, если процесс отвечает и `SELECT 1` проходит; 503 и `{"status": "unavailable"}`, если база недоступна. nginx проксирует его тем же `location /`, отдельного vhost-блока не нужно.
+
+Ограничение `/api/order/` — 30 запросов в час с IP (`DEFAULT_THROTTLE_RATES["order"]`). Кэш по умолчанию LocMem, поэтому лимит считается отдельно каждым из трёх воркеров gunicorn; для общего лимита нужен Redis и `CACHES`. Browsable API включается только при `DEBUG=True`: в проде остаётся JSONRenderer.
+
+Проверка после деплоя:
+
+```sh
+curl -s https://star-burger.kislyakov.pro/healthz/          # {"status": "ok"}
+.venv/bin/python manage.py check --deploy                   # только W009, если ключ ещё слабый
+```
+
 ### 5. Диагностика проблем
 
 | Симптом | Причина / проверка |
@@ -412,10 +442,14 @@ systemctl start star-burger
 | `uv sync` падает с `Failed to resolve` | на сервере нет Python >= 3.12 или правлен `pyproject.toml` без обновления `uv.lock`; локально `uv lock`, закоммитить и деплоить снова (на сервере `--frozen` намеренно не даёт перерешать зависимости) |
 | `No such file or directory` на `.venv/bin/gunicorn` | gunicorn вычищен из окружения, потому что пропал из `pyproject.toml`; вернуть в `[project].dependencies`, `uv lock`, задеплоить |
 | Ошибки SSL в браузере | сертификат чужого домена = vhost без своего 443-блока/сертификата; выпустить certbot'ом |
+| `/healthz/` отдаёт 503 | база недоступна: `systemctl status postgresql`, `journalctl -u star-burger -n 50` |
+| Редирект http→https зациклился | nginx не передаёт `X-Forwarded-Proto` или в `.env` нет `SECURE_PROXY_SSL_HEADER` (он в `settings.py`) |
+| `429 Too Many Requests` на заказ | сработал лимит DRF на IP: подождать час или поднять `order` в `DEFAULT_THROTTLE_RATES` |
 
 Финальная проверка продакшена:
 
 ```sh
 curl -sI https://star-burger.kislyakov.pro | head -1     # HTTP/2 200
 curl -s https://star-burger.kislyakov.pro | grep -o "<title>[^<]*</title>"   # <title>Star Burger</title>
+curl -s https://star-burger.kislyakov.pro/healthz/       # {"status": "ok"}
 ```

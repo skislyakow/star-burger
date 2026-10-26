@@ -4,9 +4,11 @@ from django.shortcuts import render
 from django.urls import include, path
 
 from . import settings
+from .views import healthz
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("healthz/", healthz, name="healthz"),
     path(
         "", render, kwargs={"template_name": "index.html"}, name="start_page"
     ),

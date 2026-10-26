@@ -1,8 +1,9 @@
 from django.http import JsonResponse
 from django.templatetags.static import static
 from rest_framework import status
-from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
 
 from .models import Product
 from .serializers import OrderSerializer
@@ -66,9 +67,18 @@ def product_list_api(request):
     )
 
 
-@api_view(["POST"])
-def register_order(request):
-    serializer = OrderSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    serializer.save()
-    return Response(serializer.data, status=status.HTTP_201_CREATED)
+class RegisterOrderView(APIView):
+    """Приём заказа из витрины.
+
+    Ограничение по IP защищает публичный эндпоинт от мусорных заказов;
+    лимит настраивается ключом `order` в `DEFAULT_THROTTLE_RATES`.
+    """
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "order"
+
+    def post(self, request):
+        serializer = OrderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
