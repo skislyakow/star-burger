@@ -1,335 +1,217 @@
-# Сайт доставки еды Star Burger
+# Star Burger
 
-Работающий сайт: **https://star-burger.kislyakov.pro/**
+[![CI](https://github.com/skislyakow/star-burger/actions/workflows/ci.yml/badge.svg)](https://github.com/skislyakow/star-burger/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
+![Django](https://img.shields.io/badge/django-5.2-092E20?logo=django&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/postgresql-16-4169E1?logo=postgresql&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
-Это сайт сети ресторанов Star Burger. Здесь можно заказать превосходные бургеры с доставкой на дом.
+**Живой сайт:** <https://star-burger.kislyakov.pro>
+**Демо-панель менеджера:** <https://star-burger.kislyakov.pro/manager/login/> — логин `demo`, пароль `demo-star-burger`
 
-![скриншот сайта](https://dvmn.org/filer/canonical/1594651635/686/)
+![Витрина Star Burger](docs/screenshots/storefront.jpg)
 
+Сайт сети бургерных с доставкой: меню с корзиной, оформление заказа без
+регистрации, панель менеджера для обработки заказов и админка. Проект вырос из
+учебного задания [Devman](https://dvmn.org/) и доведён до состояния боевого
+сервиса: PostgreSQL, CI, мониторинг ошибок, деплой за nginx и systemd.
 
-Сеть Star Burger объединяет несколько ресторанов, действующих под единой франшизой. У всех ресторанов одинаковое меню и одинаковые цены. Просто выберите блюдо из меню на сайте и укажите место доставки. Мы сами найдём ближайший к вам ресторан, всё приготовим и привезём.
+## Что умеет
 
-На сайте есть три независимых интерфейса. Первый — это публичная часть, где можно выбрать блюда из меню, и быстро оформить заказ без регистрации и SMS.
+**Витрина**
+- меню по категориям, поиск по названию, быстрый просмотр блюда;
+- корзина с количеством и суммой, оформление заказа без регистрации;
+- цена фиксируется на сервере в момент заказа — клиент не может её подменить.
 
-Второй интерфейс предназначен для менеджера. Здесь происходит обработка заказов. Менеджер видит поступившие новые заказы и первым делом созванивается с клиентом, чтобы подтвердить заказ. После оператор выбирает ближайший ресторан и передаёт туда заказ на исполнение. Там всё приготовят и сами доставят еду клиенту.
+**Панель менеджера** (`/manager/`)
+- список необработанных заказов с составом, суммой, способом оплаты и
+  комментарием;
+- подсказка, какие рестораны могут приготовить заказ и как далеко они находятся:
+  расстояние считается по координатам из Яндекс.Геокодера и кэшируется в базе;
+- матрица доступности блюд по ресторанам;
+- список ресторанов и переход в админку для редактирования.
 
-Третий интерфейс — это админка. Преимущественно им пользуются программисты при разработке сайта. Также сюда заходит менеджер, чтобы обновить меню ресторанов Star Burger.
+**Админка** (`/admin/`)
+- товары с превью картинок, категории, рестораны и меню;
+- заказы с инлайнами позиций, сменой статуса и привязкой ресторана.
 
-## Как запустить dev-версию сайта
+**Инфраструктура**
+- интеграция с Rollbar (middleware включается только при заданном токене);
+- управление зависимостями через `uv` (lock-файл в репозитории);
+- pre-commit: `ruff`, `djlint`, `mypy` + `django-stubs`;
+- GitHub Actions: линтеры, `manage.py check` с `DEBUG=True/False`, проверка
+  неприменённых миграций;
+- деплой: `git pull` → `uv sync` → сборка фронта → `collectstatic` → `migrate` →
+  рестарт systemd-сервиса (см. [AGENTS.md](AGENTS.md)).
 
-Для запуска сайта нужно запустить **одновременно** бэкенд и фронтенд, в двух терминалах.
+## Скриншоты
 
-### Как собрать бэкенд
+| Корзина | Оформление заказа |
+| --- | --- |
+| ![Корзина](docs/screenshots/storefront-cart.jpg) | ![Оформление заказа](docs/screenshots/storefront-checkout.jpg) |
 
-Скачайте код:
-```sh
-git clone https://github.com/devmanorg/star-burger.git
+| Панель менеджера: заказы | Панель менеджера: меню |
+| --- | --- |
+| ![Заказы](docs/screenshots/manager-orders.jpg) | ![Меню](docs/screenshots/manager-products.jpg) |
+
+| Админка: заказы | Мобильная витрина |
+| --- | --- |
+| ![Админка](docs/screenshots/admin-orders.jpg) | ![Мобильная витрина](docs/screenshots/storefront-mobile.jpg) |
+
+## Стек
+
+| Слой | Технологии |
+| --- | --- |
+| Backend | Python 3.12+, Django 5.2, Django REST Framework, `phonenumber_field` |
+| БД | PostgreSQL 16 (в dev можно SQLite) |
+| Frontend | React 17, Bootstrap 3, Parcel 2 |
+| Геоданные | Яндекс.Геокодер + `geopy` |
+| Мониторинг | Rollbar |
+| Качество | `ruff`, `djlint`, `mypy`, `pre-commit`, GitHub Actions |
+| Прод | gunicorn, nginx, systemd, certbot |
+
+## Как устроено
+
+```mermaid
+flowchart LR
+    browser[Браузер] -->|HTTPS| nginx[nginx :443]
+    nginx -->|proxy :8002| gunicorn[gunicorn]
+    gunicorn --> django[Django + DRF]
+    django --> db[(PostgreSQL)]
+    django -->|"адреса → координаты"| yandex[Яндекс.Геокодер]
+    django -.->|ошибки| rollbar[Rollbar]
 ```
 
-Перейдите в каталог проекта:
-```sh
-cd star-burger
+```
+star_burger/        настройки, корневые URL, WSGI
+foodcartapp/        каталог, модели заказа, публичное API, админка
+places/             кэш координат и клиент Яндекс.Геокодера
+restaurateur/       панель менеджера: вход, заказы, меню, рестораны
+templates/          HTML-оболочка витрины
+bundles-src/        исходники фронтенда (React + Parcel)
+docs/screenshots/   скриншоты для README
 ```
 
-Зависимости Python ставятся через [uv](https://docs.astral.sh/uv/). Он сам скачает нужную версию Python и создаст виртуальное окружение `.venv`.
+Публичное API:
 
-Установите uv, если его ещё нет:
+| Метод | Адрес | Назначение |
+| --- | --- | --- |
+| `GET` | `/api/products/` | доступные товары с категориями и картинками |
+| `GET` | `/api/banners/` | баннеры на главной |
+| `POST` | `/api/order/` | создание заказа: имя, фамилия, телефон, адрес, позиции |
 
-```sh
-# macOS / Linux
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
+Ключевые решения:
+
+- **Снимок цены.** `OrderItem.price` записывается при создании заказа, поэтому
+  изменение прайса не переписывает историю, а клиент не присылает цену сам.
+- **Сумма заказа** считается на стороне БД (`Order.objects.with_total_cost()`),
+  а не в шаблоне.
+- **Доступность блюд** — отдельная таблица `RestaurantMenuItem`; витрина
+  показывает блюдо, если его готовит хотя бы один ресторан.
+- **Геокодер** кэширует успешные ответы в таблице `Place`, чтобы страница
+  менеджера не дёргала внешний API при каждом открытии.
+
+## Быстрый старт
+
+Нужны Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 18+ и Docker
+(для PostgreSQL; можно обойтись SQLite).
+
 ```powershell
-# Windows
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-Затем в каталоге проекта выполните:
-
-```sh
+git clone https://github.com/skislyakow/star-burger.git
+cd star-burger
 uv sync
-```
+npm ci
 
-uv прочитает `pyproject.toml`, поставит точные версии из `uv.lock` в `.venv` и не тронет версии, на которых проект проверен. **Важно!** Версия Python должна быть не ниже 3.12 — если в системе её нет, uv скачает её сам.
-
-Отдельно активировать окружение не обязательно: команды запускаются через `uv run` (`uv run python manage.py runserver`), а uv сам подхватывает `.venv`. Активация нужна только если хочется работать в нём вручную:
-
-- Windows: `.\.venv\Scripts\activate`
-- MacOS/Linux: `source .venv/bin/activate`
-
-`requirements.txt` в проекте больше нет: список зависимостей живёт в `pyproject.toml`, а зафиксированные версии — в `uv.lock`. Оба файла хранятся в репозитории. Новая зависимость добавляется командой `uv add <пакет>`, обновление версий — `uv lock --upgrade`.
-
-`django-debug-toolbar` и `django-stubs` — dev-зависимости, они лежат в группе `dev`. `uv sync` ставит их по умолчанию, а на боевом сервере используется `uv sync --no-dev`: панель отладки там не нужна и в `settings.py` подключается только при `DEBUG=True`.
-
-### Линтеры и pre-commit
-
-В dev-набор входят `ruff` (линт и форматирование Python), `djlint` (шаблоны) и `mypy` с плагином `django-stubs` (проверка типов). Настройки — в `pyproject.toml`, разделы `[tool.ruff]`, `[tool.djlint]`, `[tool.mypy]`; миграции из проверок исключены, их генерирует Django.
-
-Чтобы проверки запускались на каждом коммите, установите git-хук (один раз после клонирования):
-
-```sh
-uv run pre-commit install
-```
-
-Дальше `git commit` сам прогонит хуки по изменённым файлам и не даст закоммитить код с ошибками. Прогнать по всему проекту вручную:
-
-```sh
-uv run pre-commit run --all-files
-```
-
-Список хуков — в `.pre-commit-config.yaml`. mypy работает из окружения проекта, поэтому ему нужен `.env` в корне: он импортирует `star_burger/settings.py`, а тот читает переменные окружения (как и `runserver`).
-
-Те же проверки гоняются в GitHub Actions (`.github/workflows/ci.yml`) на каждый push в `main`, на pull request и по кнопке вручную: `pre-commit` по всем файлам, `manage.py check` в боевых и dev-настройках и контроль того, что все изменения моделей оформлены миграциями. Локально тот же набор воспроизводится одной командой `uv run pre-commit run --all-files`.
-
-### Поднимите PostgreSQL
-
-Сайт работает на PostgreSQL 16. Проще всего поднять её в Docker (Docker Desktop должен быть запущен):
-
-```sh
-docker run -d --name starburger-pg \
-  -e POSTGRES_USER=starburger \
-  -e POSTGRES_PASSWORD=придумайте-пароль \
-  -e POSTGRES_DB=starburger \
+# PostgreSQL 16
+docker run -d --name starburger-pg `
+  -e POSTGRES_USER=starburger `
+  -e POSTGRES_PASSWORD=starburger `
+  -e POSTGRES_DB=starburger `
   -p 5432:5432 postgres:16
 ```
 
-Проверьте, что контейнер поднялся: команда `docker ps` должна показать `starburger-pg` со статусом `Up`.
+Скопируйте `.env.example` в `.env` и подставьте свой `SECRET_KEY`:
 
-Альтернатива для Linux — установить СУБД из пакетов и создать базу вручную:
-
-```sh
-sudo apt install -y postgresql
-sudo -u postgres psql -c "CREATE USER starburger WITH PASSWORD 'придумайте-пароль';"
-sudo -u postgres psql -c "CREATE DATABASE starburger OWNER starburger;"
+```powershell
+Copy-Item .env.example .env
+uv run python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
 ```
 
-### Создайте файл `.env`
+Дальше — схема, демо-данные и сборка фронта:
 
-Создайте файл `.env` **в корне проекта** и положите туда переменные окружения:
-```sh
-SECRET_KEY=django-insecure-0if40nf4nf93n4
-YANDEX_GEOCODER_API_KEY=ваш-ключ-API-геокодера
-DATABASE_URL=postgres://starburger:придумайте-пароль@127.0.0.1:5432/starburger
-DEBUG=True
-```
-
-Ключ `YANDEX_GEOCODER_API_KEY` нужен для определения координат адресов и расчёта расстояний до ресторанов на странице менеджера. Его можно получить в [кабинете разработчика Яндекса](https://developer.tech.yandex.ru/) для пакета «API Геокодера» (ключ активируется в течение 15 минут). Без ключа сайт работает, но расстояния не показываются.
-
-Все настройки доступа к базе упакованы в один URL `DATABASE_URL`: `postgres://<логин>:<пароль>@<хост>:<порт>/<имя-базы>`. Если эту переменную не задать, Django откатится на локальный SQLite — так тоже можно запускаться, но для продакшена SQLite не годится.
-
-Создайте таблицы в пустой базе следующей командой:
-
-```sh
+```powershell
 uv run python manage.py migrate
-```
-
-Запустите сервер:
-
-```sh
+uv run python manage.py seed_demo --orders 6
+.\node_modules\.bin\parcel build bundles-src/index.js --dist-dir bundles --public-url="./"
 uv run python manage.py runserver
 ```
 
-Откройте сайт в браузере по адресу [http://127.0.0.1:8000/](http://127.0.0.1:8000/). Если вы увидели пустую белую страницу, то не пугайтесь, выдохните. Просто фронтенд пока ещё не собран. Переходите к следующему разделу README.
+Сайт: <http://127.0.0.1:8000>, панель менеджера: `/manager/login/`
+(`demo` / `demo-star-burger`), админка: `/admin/` (суперпользователь создаётся
+через `uv run python manage.py createsuperuser`).
 
-### Собрать фронтенд
+`seed_demo` идемпотентен: создаёт три ресторана, меню и демо-менеджера, а
+`--orders N` добавляет демо-заказы, только если база пустая. Существующие
+товары с настоящими фотографиями команда не трогает; для новых рисует
+картинки-заглушки.
 
-**Откройте новый терминал**. Для работы сайта в dev-режиме необходима одновременная работа сразу двух программ `runserver` и `parcel`. Каждая требует себе отдельного терминала. Чтобы не выключать `runserver` откройте для фронтенда новый терминал и все нижеследующие инструкции выполняйте там.
+Во время разработки фронта вместо `parcel build` удобнее держать `parcel watch`:
 
-[Установите Node.js](https://nodejs.org/en/), если у вас его ещё нет.
-
-Проверьте, что Node.js и его пакетный менеджер корректно установлены. Если всё исправно, то терминал выведет их версии:
-
-```sh
-nodejs --version
-# v16.16.0
-# Если ошибка, попробуйте node:
-node --version
-# v16.16.0
-
-npm --version
-# 8.11.0
-```
-
-Версия `nodejs` должна быть не младше `10.0` и не старше `16.16`. Лучше ставьте `16.16.0`, её мы тестировали. Версия `npm` не важна. Как обновить Node.js читайте в статье: [How to Update Node.js](https://phoenixnap.com/kb/update-node-js-version).
-
-Перейдите в каталог проекта и установите пакеты Node.js:
-
-```sh
-cd star-burger
-npm ci --dev
-```
-
-Команда `npm ci` создаст каталог `node_modules` и установит туда пакеты Node.js. Получится аналог виртуального окружения как для Python, но для Node.js.
-
-Помимо прочего будет установлен [Parcel](https://parceljs.org/) — это упаковщик веб-приложений, похожий на [Webpack](https://webpack.js.org/). В отличии от Webpack он прост в использовании и совсем не требует настроек.
-
-Теперь запустите сборку фронтенда и не выключайте. Parcel будет работать в фоне и следить за изменениями в JS-коде:
-
-```sh
-./node_modules/.bin/parcel watch bundles-src/index.js --dist-dir bundles --public-url="./"
-```
-
-Если вы на Windows, то вам нужна та же команда, только с другими слешами в путях:
-
-```sh
+```powershell
 .\node_modules\.bin\parcel watch bundles-src/index.js --dist-dir bundles --public-url="./"
 ```
 
-Дождитесь завершения первичной сборки. Это вполне может занять 10 и более секунд. О готовности вы узнаете по сообщению в консоли:
+## Переменные окружения
 
-```
-✨  Built in 10.89s
-```
+| Переменная | Обязательна | Назначение |
+| --- | --- | --- |
+| `SECRET_KEY` | да | ключ Django |
+| `DEBUG` | нет | `True` по умолчанию; на проде — `False` |
+| `ALLOWED_HOSTS` | на проде | список хостов через запятую |
+| `DATABASE_URL` | нет | без неё используется SQLite |
+| `YANDEX_GEOCODER_API_KEY` | нет | ключ Геокодера; без него не считаются расстояния |
+| `ROLLBAR_TOKEN` | нет | включает отправку ошибок в Rollbar |
+| `ROLLBAR_ENVIRONMENT` | нет | окружение в Rollbar |
+| `DEMO_MANAGER_PASSWORD` | нет | пароль демо-менеджера для `seed_demo` |
 
-Parcel будет следить за файлами в каталоге `bundles-src`. Сначала он прочитает содержимое `index.js` и узнает какие другие файлы он импортирует. Затем Parcel перейдёт в каждый из этих подключенных файлов и узнает что импортируют они. И так далее, пока не закончатся файлы. В итоге Parcel получит полный список зависимостей. Дальше он соберёт все эти сотни мелких файлов в большие бандлы `bundles/index.js` и `bundles/index.css`. Они полностью самодостаточны, и потому пригодны для запуска в браузере. Именно эти бандлы сервер отправит клиенту.
+Полный список с комментариями — в [.env.example](.env.example).
 
-Теперь если зайти на страницу  [http://127.0.0.1:8000/](http://127.0.0.1:8000/), то вместо пустой страницы вы увидите:
+## Команды
 
-![](https://dvmn.org/filer/canonical/1594651900/687/)
+| Команда | Что делает |
+| --- | --- |
+| `uv run python manage.py runserver` | dev-сервер |
+| `uv run python manage.py migrate` | применяет миграции |
+| `uv run python manage.py seed_demo --orders 6` | демо-данные и демо-менеджер |
+| `uv run python manage.py check --deploy` | аудит прод-настроек безопасности |
+| `uv run pre-commit run --all-files` | линтеры, формат и типы |
+| `.\node_modules\.bin\parcel build bundles-src/index.js --dist-dir bundles --public-url="./"` | сборка фронта |
 
-Каталог `bundles` в репозитории особенный — туда Parcel складывает результаты своей работы. Эта директория предназначена исключительно для результатов сборки фронтенда и потому исключёна из репозитория с помощью `.gitignore`.
+## Качество кода
 
-**Сбросьте кэш браузера <kbd>Ctrl-F5</kbd>.** Браузер при любой возможности старается кэшировать файлы статики: CSS, картинки и js-код. Порой это приводит к странному поведению сайта, когда код уже давно изменился, но браузер этого не замечает и продолжает использовать старую закэшированную версию. В норме Parcel решает эту проблему самостоятельно. Он следит за пересборкой фронтенда и предупреждает JS-код в браузере о необходимости подтянуть свежий код. Но если вдруг что-то у вас идёт не так, то начните ремонт со сброса браузерного кэша, жмите <kbd>Ctrl-F5</kbd>.
+- `ruff` — линт и формат Python (длина строки 79);
+- `djlint` — форматирование Django-шаблонов;
+- `mypy` + `django-stubs` — проверка типов;
+- CI прогоняет всё это на каждый push и pull request, плюс `manage.py check`
+  с `DEBUG=True` и `DEBUG=False` и `makemigrations --check`.
 
+Что дальше: автотестов пока нет — следующий шаг — `pytest-django` на сценарии
+заказа, сумму, доступность блюд и геокодер; затем вынос правил доступности и
+смены статусов из шаблонов и админки в отдельные модули.
 
-## Как перенести данные из старого SQLite в Postgres
+## Деплой
 
-Если сайт уже жил на SQLite и в нём накопились данные (заказы, меню), они переносятся штатными средствами Django. Схему таблиц переносить не нужно — её создаст `migrate`, двигаются только данные.
+Прод живёт на Ubuntu 24.04: nginx → gunicorn `127.0.0.1:8002` под systemd,
+PostgreSQL на том же хосте, HTTPS через certbot. Полная инструкция по
+развёртыванию, обновлению и диагностике — в [AGENTS.md](AGENTS.md).
 
-1. Выгрузите данные из старой базы. Пока в `.env` нет переменной `DATABASE_URL`, Django работает с файлом `db.sqlite3` — это то, что нужно:
+## О проекте
 
-```sh
-uv run python -X utf8 manage.py dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.permission --indent 2 -o data.json
-```
+Стартовый код и вёрстка — из курса Devman «Основы веб-разработки». Дальше
+проект переехал на PostgreSQL, получил управление зависимостями через `uv`,
+pre-commit и CI, мониторинг ошибок, кэш геокодера, нормальный деплой и
+демо-данные для быстрого запуска.
 
-Флаг `-X utf8` обязателен на Windows: без него Python запишет файл в кодировке локали (cp1251), и `loaddata` затем упадёт с `UnicodeDecodeError`. На Linux/macOS флаг не нужен.
+## Лицензия
 
-Исключения `-e contenttypes -e auth.permission` убирают служебные таблицы — их пересоздаст `migrate` на новой базе, иначе загрузка упадёт из-за конфликта ключей. Флаги `--natural-foreign --natural-primary` сохраняют связи между объектами через естественные ключи вместо числовых ID.
-
-2. Добавьте `DATABASE_URL` в `.env` и создайте схему таблиц в пустом Postgres:
-
-```sh
-uv run python manage.py migrate
-```
-
-3. Залейте данные:
-
-```sh
-uv run python manage.py loaddata data.json
-```
-
-4. Уберите старый файл базы — сайт должен работать и без него:
-
-```powershell
-Rename-Item db.sqlite3 db.sqlite3.bak    # Windows PowerShell
-```
-```sh
-mv db.sqlite3 db.sqlite3.backup          # Linux
-```
-
-Файл `data.json` содержит хэши паролей пользователей — **не выкладывайте его в репозиторий** (он добавлен в `.gitignore`).
-
-Проверьте себя: количество записей до и после переезда должно совпадать. Удобно сверять в shell: `uv run python manage.py shell -c 'from foodcartapp.models import Order; print(Order.objects.count())'`.
-
-
-## Как запустить prod-версию сайта
-
-Собрать фронтенд:
-
-```sh
-./node_modules/.bin/parcel build bundles-src/index.js --dist-dir bundles --public-url="./"
-```
-
-Настроить бэкенд: создать файл `.env` в корне проекта со следующими настройками:
-
-- `DEBUG` — дебаг-режим. Поставьте `False`.
-- `SECRET_KEY` — секретный ключ проекта. Он отвечает за шифрование на сайте. Например, им зашифрованы все пароли на вашем сайте.
-- `ALLOWED_HOSTS` — [см. документацию Django](https://docs.djangoproject.com/en/5.2/ref/settings/#allowed-hosts)
-- `DATABASE_URL` — адрес боевой базы PostgreSQL: `postgres://<логин>:<пароль>@127.0.0.1:5432/<имя-базы>`. Пароль базы придумайте свой, случайный (`openssl rand -base64 24`) и храните только в `.env` на сервере.
-- `YANDEX_GEOCODER_API_KEY` — ключ API Геокодера Яндекса. Используется для расчёта расстояний от заказа до ресторанов на странице менеджера. Получить можно в [кабинете разработчика Яндекса](https://developer.tech.yandex.ru/).
-- `ROLLBAR_TOKEN` — access-токен проекта [Rollbar](https://rollbar.com/) (тип `post_server_item`). Нужен для отправки сообщений об ошибках сайта в Rollbar. Это секрет: храните его только в `.env`, в репозиторий не выкладывайте. Без токена сайт работает как обычно, просто ошибки никуда не отправляются.
-- `ROLLBAR_ENVIRONMENT` — название окружения, которым помечаются ошибки в Rollbar. На боевом сервере ставьте `production`. Для локальных копий придумайте уникальное имя (например, `kislyakov-dev`), чтобы фильтровать свои ошибки отдельно от чужих и от боевых. Если переменную не задать, ошибки будут помечены как `development`.
-
-## Быстрое обновление кода на сервере
-
-Зависимости Python на сервере ставит [uv](https://docs.astral.sh/uv/) — тот же менеджер, что и локально. Один раз установите его:
-
-```sh
-curl -LsSf https://astral.sh/uv/install.sh | sh   # бинарник в /root/.local/bin/uv
-```
-
-`uv sync --frozen --no-dev` ставит ровно те версии, что записаны в `uv.lock`, и не трогает lock-файл на сервере. Флаг `--no-dev` не ставит `django-debug-toolbar` и `django-stubs`: в дебаг-панели на проде нет нужды, а `settings.py` подключает её только при `DEBUG=True`.
-
-Рутина деплоя автоматизирована bash-скриптом `/root/deploy_star_burger.sh`. Он:
-
-1. подтягивает свежий код (`git pull`);
-2. обновляет зависимости Python и Node.js;
-3. пересобирает фронтенд (Parcel) и статику Django;
-4. накатывает миграции;
-5. перезапускает gunicorn;
-6. сообщает Rollbar о выкатке (Deploy Tracking: окружение + хэш коммита).
-
-Содержимое скрипта — линейные команды без ветвлений, каждую можно скопировать и запустить вручную в отдельном терминале:
-
-```bash
-#!/bin/bash
-
-set -e
-
-# uv ставится в /root/.local/bin и не попадает в PATH неинтерактивного шелла.
-export PATH="$HOME/.local/bin:$PATH"
-
-cd /opt/star-burger
-
-echo "=== git pull ==="
-git pull
-
-echo "=== uv sync ==="
-uv sync --frozen --no-dev
-
-echo "=== npm ci ==="
-npm ci --no-audit --no-fund
-
-echo "=== parcel build ==="
-./node_modules/.bin/parcel build bundles-src/index.js --dist-dir bundles --public-url="./"
-
-echo "=== collectstatic ==="
-.venv/bin/python manage.py collectstatic --noinput
-
-echo "=== migrate ==="
-.venv/bin/python manage.py migrate --noinput
-
-echo "=== restart star-burger ==="
-systemctl restart star-burger
-
-echo "=== notify rollbar ==="
-ROLLBAR_TOKEN=$(grep '^ROLLBAR_TOKEN=' .env | cut -d= -f2)
-ROLLBAR_ENVIRONMENT=$(grep '^ROLLBAR_ENVIRONMENT=' .env | cut -d= -f2)
-REVISION=$(git rev-parse HEAD)
-
-curl -sS https://api.rollbar.com/api/1/deploy/ \
-  -F access_token=$ROLLBAR_TOKEN \
-  -F environment=$ROLLBAR_ENVIRONMENT \
-  -F revision=$REVISION \
-  -F local_username=root
-
-echo
-
-echo "Deploy OK!"
-```
-
-Директива `set -e` прерывает выполнение при первой же ошибке — сайт не получит поломанную версию, а nginx во время деплоя не останавливается. Уведомление Rollbar отправляется последним шагом: только после успешного рестарта сервиса. Токен читается из `.env` (в скрипте не хранится), хэш коммита берётся командой `git rev-parse HEAD` уже после `git pull`. Ответ API вида `{"err":0,...}` означает успех — запись о деплое появится в Rollbar (лента Items и страница Deploys).
-
-Порядок обновления:
-
-1. Сделайте коммит и отправьте его на GitHub.
-2. Подключитесь к серверу: `ssh vds`.
-3. Запустите деплой: `~/deploy_star_burger.sh`.
-
-## Цели проекта
-
-Код написан в учебных целях — это урок в курсе по Python и веб-разработке на сайте [Devman](https://dvmn.org). За основу был взят код проекта [FoodCart](https://github.com/Saibharath79/FoodCart).
-
-Где используется репозиторий:
-
-- Второй и третий урок [учебного курса Django](https://dvmn.org/modules/django/)
+[MIT](LICENSE)
