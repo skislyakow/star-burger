@@ -118,16 +118,21 @@ curl -LsSf https://astral.sh/uv/install.sh | sh    # бинарник в /root/.
 
 Грабли: `gunicorn` не был ни в `requirements.txt`, ни в `pyproject.toml` — он когда-то ставился в серверный `.venv` руками. `uv sync` вычищает из окружения всё, чего нет в lock-файле, поэтому gunicorn **обязан** быть в `[project].dependencies` (сейчас там есть). Если после перехода на uv systemd падает с `No such file or directory` на `.venv/bin/gunicorn` — значит его вычистили: верните в `pyproject.toml` и повторите `uv sync`.
 
-`pip` в окружении от uv нет — команды вида `.venv/bin/pip install` на сервере больше не работают. Вместо них `.venv/bin/python -m pip` не появится тоже: ставьте пакеты через `uv add` локально и деплойте lock-файл.
+`pip` в окружении от uv не нужен: зависимости ставятся только из lock-файла. В серверном `.venv` старый `pip` остался (uv не трогает «служебные» пакеты унаследованного окружения — `pip`, `setuptools`, `wheel`), но `.venv/bin/pip install …` бессмыслен: ближайший `uv sync` вычистит всё, чего нет в lock-файле. Ставить пакеты нужно через `uv add` локально и деплоить обновлённый `uv.lock`.
 
 ### 1. Деплой: `/root/deploy_star_burger.sh`
 
 Рутина обновления автоматизирована bash-скриптом в домашней папке root'а (в репозиторий не входит — сервероспецифичен). Порядок действий при релизе: коммит → push → `ssh vds` → `~/deploy_star_burger.sh`.
 
+Скрипт переведён на uv 26.10.2026: шаг `pip install` заменён на `uv sync --frozen --no-dev`, добавлен `export PATH="$HOME/.local/bin:$PATH"` (иначе `uv: command not found` в неинтерактивном шелле). Бэкап прежней версии — `/root/deploy_star_burger.sh.bak.20261026`.
+
 ```bash
 #!/bin/bash
 
 set -e
+
+# uv ставится в /root/.local/bin и не попадает в PATH неинтерактивного шелла.
+export PATH="$HOME/.local/bin:$PATH"
 
 cd /opt/star-burger
 

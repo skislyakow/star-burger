@@ -256,6 +256,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh   # бинарник в /root/.l
 
 set -e
 
+# uv ставится в /root/.local/bin и не попадает в PATH неинтерактивного шелла.
+export PATH="$HOME/.local/bin:$PATH"
+
 cd /opt/star-burger
 
 echo "=== git pull ==="
