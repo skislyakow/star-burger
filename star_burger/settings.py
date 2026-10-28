@@ -157,6 +157,12 @@ REST_FRAMEWORK = {
 
 YANDEX_GEOCODER_API_KEY = env("YANDEX_GEOCODER_API_KEY", "")
 
+# Геокодер: удачный ответ живёт месяц, неудачный — сутки. Негативный кэш
+# спасает от повторных запросов по адресу, который Яндекс не разобрал,
+# но не даёт временному сбою залипнуть навсегда.
+GEOCODER_CACHE_TTL_DAYS = env.int("GEOCODER_CACHE_TTL_DAYS", 30)
+GEOCODER_NEGATIVE_TTL_DAYS = env.int("GEOCODER_NEGATIVE_TTL_DAYS", 1)
+
 ROLLBAR_TOKEN = env("ROLLBAR_TOKEN", "")
 ROLLBAR = {
     "access_token": ROLLBAR_TOKEN,

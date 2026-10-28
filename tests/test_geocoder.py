@@ -1,6 +1,10 @@
 """Геокодер: кэш в `Place`, разбор ответа Яндекса и молчаливые отказы."""
 
+from datetime import timedelta
+
 import pytest
+from django.test import override_settings
+from django.utils import timezone
 
 from places import geocoder
 from places.models import Place
@@ -33,6 +37,14 @@ def yandex_payload(*positions):
             }
         }
     }
+
+
+def make_stale(place: Place, *, days: int) -> None:
+    """Сдвигает дату запроса в прошлое, не трогая auto_now."""
+    Place.objects.filter(pk=place.pk).update(
+        requested_at=timezone.localdate() - timedelta(days=days)
+    )
+    place.refresh_from_db()
 
 
 def test_cached_coordinates_do_not_hit_network(monkeypatch):
@@ -72,14 +84,24 @@ def test_only_missing_addresses_are_fetched(monkeypatch):
     assert requested == [OTHER]
 
 
-def test_failed_lookup_returns_none_and_stores_nothing(monkeypatch):
+def test_failed_lookup_returns_none_and_is_cached(monkeypatch):
+    requested = []
+
     def fail(address, apikey):
+        requested.append(address)
         raise geocoder.GeocoderError("не нашёл")
 
     monkeypatch.setattr(geocoder, "fetch_coordinates", fail)
 
     assert geocoder.get_coordinates_map([MOSCOW]) == {MOSCOW: None}
-    assert Place.objects.count() == 0
+    assert requested == [MOSCOW]
+
+    # Повторный запрос в тот же день не должен снова идти в Яндекс.
+    assert geocoder.get_coordinates_map([MOSCOW]) == {MOSCOW: None}
+    assert requested == [MOSCOW]
+
+    place = Place.objects.get(address=MOSCOW)
+    assert (place.lat, place.lon) == (None, None)
 
 
 def test_cached_place_without_coordinates_is_not_refetched(monkeypatch):
@@ -91,6 +113,72 @@ def test_cached_place_without_coordinates_is_not_refetched(monkeypatch):
     monkeypatch.setattr(geocoder, "fetch_coordinates", fail)
 
     assert geocoder.get_coordinates_map([MOSCOW]) == {MOSCOW: None}
+
+
+def test_stale_coordinates_are_refetched(monkeypatch):
+    place = Place.objects.create(address=MOSCOW, lat=55.75, lon=37.61)
+    make_stale(place, days=31)
+    monkeypatch.setattr(
+        geocoder, "fetch_coordinates", lambda address, apikey: (55.8, 37.5)
+    )
+
+    assert geocoder.get_coordinates_map([MOSCOW]) == {MOSCOW: (55.8, 37.5)}
+
+    place.refresh_from_db()
+    assert (place.lat, place.lon) == (55.8, 37.5)
+    assert place.requested_at == timezone.localdate()
+
+
+def test_coordinates_within_ttl_are_not_refetched(monkeypatch):
+    place = Place.objects.create(address=MOSCOW, lat=55.75, lon=37.61)
+    make_stale(place, days=29)
+
+    def fail(*args, **kwargs):
+        raise AssertionError("координаты ещё не просрочены")
+
+    monkeypatch.setattr(geocoder, "fetch_coordinates", fail)
+
+    assert geocoder.get_coordinates_map([MOSCOW]) == {MOSCOW: (55.75, 37.61)}
+
+
+@override_settings(GEOCODER_CACHE_TTL_DAYS=1)
+def test_freshness_follows_configured_ttl(monkeypatch):
+    place = Place.objects.create(address=MOSCOW, lat=55.75, lon=37.61)
+    make_stale(place, days=2)
+    monkeypatch.setattr(
+        geocoder, "fetch_coordinates", lambda address, apikey: (55.8, 37.5)
+    )
+
+    assert geocoder.get_coordinates_map([MOSCOW]) == {MOSCOW: (55.8, 37.5)}
+
+
+def test_stale_negative_cache_is_retried(monkeypatch):
+    place = Place.objects.create(address=MOSCOW)
+    make_stale(place, days=2)
+    monkeypatch.setattr(
+        geocoder, "fetch_coordinates", lambda address, apikey: (55.8, 37.5)
+    )
+
+    assert geocoder.get_coordinates_map([MOSCOW]) == {MOSCOW: (55.8, 37.5)}
+
+    place.refresh_from_db()
+    assert (place.lat, place.lon) == (55.8, 37.5)
+
+
+def test_stale_coordinates_survive_failed_refresh(monkeypatch):
+    place = Place.objects.create(address=MOSCOW, lat=55.75, lon=37.61)
+    make_stale(place, days=31)
+
+    def fail(address, apikey):
+        raise geocoder.GeocoderError("Яндекс недоступен")
+
+    monkeypatch.setattr(geocoder, "fetch_coordinates", fail)
+
+    assert geocoder.get_coordinates_map([MOSCOW]) == {MOSCOW: (55.75, 37.61)}
+
+    place.refresh_from_db()
+    assert (place.lat, place.lon) == (55.75, 37.61)
+    assert place.requested_at == timezone.localdate()
 
 
 def test_fetch_coordinates_parses_yandex_response(monkeypatch):
