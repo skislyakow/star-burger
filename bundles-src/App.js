@@ -70,13 +70,17 @@ class App extends Component {
     }
   };
 
-  showStatus = (kind, text) => {
+  showStatus = (kind, text, action = null) => {
     clearTimeout(this.statusTimer);
-    this.setState({ status: { kind, text } });
-    this.statusTimer = setTimeout(
-      () => this.setState({ status: null }),
-      STATUS_TIMEOUT,
-    );
+    this.setState({ status: { kind, text, action } });
+    // Баннер со ссылкой на заказ не прячем по таймеру: клиент должен
+    // успеть сохранить ссылку.
+    if (!action) {
+      this.statusTimer = setTimeout(
+        () => this.setState({ status: null }),
+        STATUS_TIMEOUT,
+      );
+    }
   };
 
   handleSearch = (event) => {
@@ -119,8 +123,10 @@ class App extends Component {
   };
 
   handleCheckout = async ({ firstname, lastname, phonenumber, address }) => {
+    let order = null;
+
     try {
-      await submitOrder({
+      order = await submitOrder({
         firstname: firstname.trim(),
         lastname: lastname.trim(),
         phonenumber: phonenumber.trim(),
@@ -138,9 +144,14 @@ class App extends Component {
       checkoutModalActive: false,
       checkoutError: null,
     });
+
+    const orderNumber = order && order.id ? ` №${order.id}` : '';
     this.showStatus(
       'success',
-      'Заказ оформлен. Вам перезвонят в течение 10 минут.',
+      `Заказ${orderNumber} оформлен. Вам перезвонят в течение 10 минут.`,
+      order && order.tracking_url
+        ? { href: order.tracking_url, label: 'Следить за заказом' }
+        : null,
     );
     return true;
   };
@@ -228,6 +239,7 @@ class App extends Component {
           <StatusBanner
             kind={status.kind}
             text={status.text}
+            action={status.action}
             onClose={() => this.setState({ status: null })}
           />
         )}

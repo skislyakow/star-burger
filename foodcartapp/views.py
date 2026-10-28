@@ -1,12 +1,22 @@
 from django.http import JsonResponse
+from django.shortcuts import render
 from django.templatetags.static import static
+from django.views.decorators.cache import never_cache
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from .models import Product
+from .models import Order, Product
 from .serializers import OrderSerializer
+from .tracking import (
+    CUSTOMER_STATUS_HINTS,
+    CUSTOMER_STATUS_LABELS,
+    STATUS_BADGES,
+    mask_phone,
+    read_tracking_token,
+    status_steps,
+)
 
 
 def banners_list_api(request):
@@ -82,3 +92,40 @@ class RegisterOrderView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@never_cache
+def order_status(request, token: str):
+    """Публичная страница статуса по подписанной ссылке из заказа."""
+    order_id = read_tracking_token(token)
+    order = None
+    if order_id is not None:
+        order = (
+            Order.objects.prefetch_related("items__product")
+            .filter(pk=order_id)
+            .first()
+        )
+
+    if order is None:
+        # Ссылка битая, просроченная или заказ удалён — отдаём понятную
+        # страницу вместо технической 404, но с кодом 404 для поисковиков.
+        return render(
+            request,
+            "foodcartapp/order_status.html",
+            {"order": None},
+            status=404,
+        )
+
+    items = list(order.items.all())
+    context = {
+        "order": order,
+        "status_label": CUSTOMER_STATUS_LABELS.get(
+            order.status, order.get_status_display()
+        ),
+        "status_hint": CUSTOMER_STATUS_HINTS.get(order.status, ""),
+        "status_badge": STATUS_BADGES.get(order.status, "default"),
+        "steps": status_steps(order),
+        "total": sum(item.total_price for item in items),
+        "masked_phone": mask_phone(order.phonenumber),
+    }
+    return render(request, "foodcartapp/order_status.html", context)

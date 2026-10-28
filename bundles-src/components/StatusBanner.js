@@ -1,6 +1,6 @@
 import React from 'react';
 
-const StatusBanner = ({ kind = 'success', text, onClose }) => (
+const StatusBanner = ({ kind = 'success', text, action, onClose }) => (
   <div className={`alert alert-${kind} status-banner`} role="alert">
     <button
       type="button"
@@ -11,6 +11,14 @@ const StatusBanner = ({ kind = 'success', text, onClose }) => (
       <span aria-hidden="true">×</span>
     </button>
     {text}
+    {action && (
+      <>
+        {' '}
+        <a className="alert-link" href={action.href}>
+          {action.label}
+        </a>
+      </>
+    )}
   </div>
 );
 

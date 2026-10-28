@@ -1,7 +1,9 @@
+from django.urls import reverse
 from rest_framework import serializers
 
 from .models import Order, OrderItem
 from .orders import OrderError, OrderLine, place_order
+from .tracking import build_tracking_token
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -33,6 +35,7 @@ class OrderProductsField(serializers.ListField):
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     products = OrderProductsField(write_only=True)
+    tracking_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -45,7 +48,14 @@ class OrderSerializer(serializers.ModelSerializer):
             "created_at",
             "items",
             "products",
+            "tracking_url",
         ]
+
+    def get_tracking_url(self, order: Order) -> str:
+        return reverse(
+            "order_status",
+            kwargs={"token": build_tracking_token(order.id)},
+        )
 
     def create(self, validated_data):
         products = validated_data.pop("products")

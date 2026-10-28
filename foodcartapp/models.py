@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import DecimalField, F, Sum, Value
@@ -254,6 +256,10 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.product.name} * {self.quantity}"
+
+    @property
+    def total_price(self) -> Decimal:
+        return self.price * self.quantity
 
 
 class RestaurantMenuItem(models.Model):

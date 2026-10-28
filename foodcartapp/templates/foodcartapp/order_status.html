@@ -1,0 +1,118 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <title>{% if order %}Заказ №{{ order.id }}{% else %}Статус заказа{% endif %} — Star Burger</title>
+    <link rel="icon" href="{% static 'icon.png' %}" type="image/x-icon">
+    <link rel="stylesheet"
+          href="https://stackpath.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css"
+          integrity="sha384-HSMxcRTRxnN+Bdg0JdbxYKrThecOKuH5zCYotlSAcp1+c8xmyTe9GYg1l9a69psu"
+          crossorigin="anonymous">
+    <style>
+      .tracking-steps .list-group-item {
+        border-left-width: 4px;
+      }
+      .tracking-steps .step-done {
+        border-left-color: #5cb85c;
+      }
+      .tracking-steps .step-current {
+        border-left-color: #337ab7;
+        font-weight: 700;
+      }
+      .tracking-steps .step-pending {
+        border-left-color: #ddd;
+        color: #999;
+      }
+      .tracking-total {
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .tracking-page {
+        max-width: 760px;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="navbar navbar-inverse">
+      <div class="container">
+        <div class="navbar-header">
+          <a class="navbar-brand" href="{% url 'start_page' %}">Star Burger</a>
+        </div>
+        <p class="navbar-text navbar-right">Статус заказа</p>
+      </div>
+    </nav>
+    <div class="container tracking-page">
+      {% if order %}
+        <h2>Заказ №{{ order.id }}</h2>
+        <p class="text-muted">Оформлен {{ order.created_at|date:"d.m.Y в H:i" }}</p>
+        <div class="alert alert-{{ status_badge }}">
+          <strong>{{ status_label }}.</strong> {{ status_hint }}
+        </div>
+        <ul class="list-group tracking-steps">
+          {% for step in steps %}
+            <li class="list-group-item step-{{ step.state }}">
+              {{ step.label }}
+              {% if step.at %}
+                <span class="text-muted">— {{ step.at|date:"d.m.Y H:i" }}</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+        {% if order.called_at %}
+          <p class="text-muted">Менеджер связался с вами {{ order.called_at|date:"d.m.Y" }}.</p>
+        {% endif %}
+        <h3>Состав заказа</h3>
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Блюдо</th>
+                <th class="text-right">Цена</th>
+                <th class="text-right">Кол-во</th>
+                <th class="text-right">Сумма</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in order.items.all %}
+                <tr>
+                  <td>{{ item.product.name }}</td>
+                  <td class="text-right">{{ item.price|floatformat:2 }} ₽</td>
+                  <td class="text-right">{{ item.quantity }}</td>
+                  <td class="text-right">{{ item.total_price|floatformat:2 }} ₽</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="3" class="text-right">Итого</td>
+                <td class="text-right tracking-total">{{ total|floatformat:2 }} ₽</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <h3>Доставка</h3>
+        <p>
+          {{ order.address }}
+          <br>
+          Телефон: {{ masked_phone }}
+        </p>
+        <p class="text-muted small">Ссылка действует 30 дней. Сохраните её, чтобы проверить статус позже.</p>
+        <p><a class="btn btn-default" href="{% url 'start_page' %}">Вернуться в меню</a></p>
+      {% else %}
+        <div class="alert alert-warning">
+          <h2>Ссылка не работает</h2>
+          <p>
+            Возможно, она устарела или скопирована с ошибкой. Оформите заказ
+            заново или свяжитесь с рестораном.
+          </p>
+        </div>
+        <p><a class="btn btn-primary" href="{% url 'start_page' %}">В меню</a></p>
+      {% endif %}
+    </div>
+  </body>
+</html>
